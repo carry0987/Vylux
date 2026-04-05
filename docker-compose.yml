@@ -1,0 +1,83 @@
+name: vylux
+services:
+  vylux:
+    build: .
+    restart: unless-stopped
+    environment:
+      TZ: UTC
+    env_file:
+      - .env
+    volumes:
+      - media-tmp:/var/cache/vylux
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:${PORT:-3000}/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - public
+      - private
+
+  postgres:
+    image: postgres:18.1-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mypassword}
+      POSTGRES_USER: ${POSTGRES_USER:-myuser}
+      POSTGRES_DB: ${POSTGRES_DB:-mydb}
+      TZ: UTC
+      POSTGRES_INITDB_ARGS: >-
+        --locale-provider=builtin
+        --builtin-locale=C.UTF-8
+        --encoding=UTF8
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-myuser} -d ${POSTGRES_DB:-mydb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - private
+
+  redis:
+    image: redis:8.4-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - private
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    command: tunnel run
+    depends_on:
+      vylux:
+        condition: service_healthy
+    networks:
+      - public
+
+volumes:
+  media-tmp:
+  postgres-data:
+  redis-data:
+
+networks:
+  public:
+    driver: bridge
+  private:
+    internal: true
