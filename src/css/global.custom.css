@@ -1,0 +1,50 @@
+/**
+ * Any CSS included here will be global. The classic template
+ * bundles Infima by default. Infima is a CSS framework designed to
+ * work well for content-centric websites.
+ */
+
+/* You can override the default Infima variables here. */
+:root {
+    --ifm-color-primary: #0f8f88;
+    --ifm-color-primary-dark: #0d817b;
+    --ifm-color-primary-darker: #0c7a74;
+    --ifm-color-primary-darkest: #0a655f;
+    --ifm-color-primary-light: #11a099;
+    --ifm-color-primary-lighter: #12a7a0;
+    --ifm-color-primary-lightest: #1fbbb3;
+    --ifm-background-color: #f7fafb;
+    --ifm-code-font-size: 95%;
+    --ifm-code-padding-horizontal: 0.25em;
+    --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+}
+
+/* For readability concerns, you should choose a lighter palette in dark mode. */
+[data-theme="dark"] {
+    --ifm-color-primary: #34c9c1;
+    --ifm-color-primary-dark: #21b8b0;
+    --ifm-color-primary-darker: #1fafaa;
+    --ifm-color-primary-darkest: #1a908b;
+    --ifm-color-primary-light: #4cd0c9;
+    --ifm-color-primary-lighter: #59d4cd;
+    --ifm-color-primary-lightest: #7cddd8;
+    --ifm-background-color: #0c1217;
+    --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+/* You can add custom styles here. */
+a.breadcrumbs__link {
+    vertical-align: top;
+}
+
+pre.prism-code:not(:has(> code)) {
+    border-radius: 0;
+}
+
+pre > code span[class*="codeLineContent"] {
+    padding-right: 0;
+}
+
+.theme-doc-markdown h1 {
+    letter-spacing: -0.03em;
+}

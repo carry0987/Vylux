@@ -1,0 +1,26 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docs.category.Architecture": {
+    "message": "架構",
+    "description": "The label for category 'Architecture' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.Media Pipelines": {
+    "message": "媒體處理",
+    "description": "The label for category 'Media Pipelines' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.HTTP APIs": {
+    "message": "HTTP API",
+    "description": "The label for category 'HTTP APIs' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.Operations": {
+    "message": "維運",
+    "description": "The label for category 'Operations' in sidebar 'docs'"
+  },
+  "sidebar.docs.category.Development": {
+    "message": "開發",
+    "description": "The label for category 'Development' in sidebar 'docs'"
+  }
+}
