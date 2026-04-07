@@ -12,7 +12,7 @@ description: "Start Vylux locally with the shortest possible path, prepare depen
 - `curl`
 - S3-compatible storage for source and derived assets such as RustFS, R2, or S3
 
-If you use the repository Docker image directly, the runtime already contains `ffmpeg`, `vips`, and `packager`. If you run Vylux on the host with `go run`, install FFmpeg and Shaka Packager locally.
+If you use the repository Docker image directly, the runtime already contains `ffmpeg`, `vips`, and `packager`. If you run Vylux on the host with `go run`, install FFmpeg, libvips, `pkg-config`, and Shaka Packager locally. On macOS with Homebrew, `brew install vips pkg-config` provides the libvips toolchain that the Go image pipeline links against.
 
 ## Recommended local development flow
 
@@ -111,6 +111,22 @@ Or split roles into two processes:
 go run ./cmd/vylux --mode=server
 go run ./cmd/vylux --mode=worker
 ```
+
+If startup fails with a linker error such as `library 'vips' not found`, the most common causes are:
+
+- libvips is not installed on the host
+- `pkg-config` cannot resolve the current libvips installation
+- Go's build cache still contains stale cgo linker flags from an older Homebrew Cellar path
+
+On macOS with Homebrew, the fastest recovery path is usually:
+
+```bash showLineNumbers
+brew install vips pkg-config
+go clean -cache
+go run ./cmd/vylux
+```
+
+If `brew install` reports that both packages are already installed, rerun `go clean -cache` anyway after a Homebrew upgrade. That forces cgo to rebuild with the current `pkg-config` output instead of reusing stale linker paths.
 
 ### 5. Validate service health
 

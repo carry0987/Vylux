@@ -12,7 +12,7 @@ description: "用最短路徑在本機啟動 Vylux、準備依賴、建立第一
 - `curl`
 - 供來源物件與輸出物件使用的 S3-compatible storage，例如 RustFS、R2 或 S3
 
-如果你直接使用專案提供的 Docker image，runtime 內已包含 `ffmpeg`、`vips` 與 `packager`；若以 `go run` 在 host 上開發，則需要自己安裝 FFmpeg 與 Shaka Packager。
+如果你直接使用專案提供的 Docker image，runtime 內已包含 `ffmpeg`、`vips` 與 `packager`；若以 `go run` 在 host 上開發，則需要自己安裝 FFmpeg、libvips、`pkg-config` 與 Shaka Packager。若是在 macOS 上使用 Homebrew，`brew install vips pkg-config` 會提供 Go 圖片處理路徑連結所需的 libvips toolchain。
 
 ## 本機開發建議流程
 
@@ -111,6 +111,22 @@ go run ./cmd/vylux
 go run ./cmd/vylux --mode=server
 go run ./cmd/vylux --mode=worker
 ```
+
+若啟動時出現 `library 'vips' not found` 這類 linker error，最常見原因是：
+
+- host 上還沒安裝 libvips
+- `pkg-config` 無法解析目前的 libvips 安裝位置
+- Go build cache 還保留了舊的 cgo linker flags，例如 Homebrew 升版前的 Cellar 路徑
+
+在 macOS + Homebrew 下，最快的排查與修復流程通常是：
+
+```bash showLineNumbers
+brew install vips pkg-config
+go clean -cache
+go run ./cmd/vylux
+```
+
+若 `brew install` 顯示套件已經存在，在 Homebrew 升版後仍建議再跑一次 `go clean -cache`。這會強制 cgo 依照目前的 `pkg-config` 輸出重新編譯，而不是沿用舊的 linker path。
 
 ### 5. 驗證服務是否可用
 
