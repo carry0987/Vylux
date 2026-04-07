@@ -3,10 +3,12 @@ package config
 import (
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	redis "github.com/redis/go-redis/v9"
 )
 
 // Config holds all configuration for Vylux, populated from environment variables.
@@ -79,6 +81,8 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	cfg.normalize()
+
 	return &cfg, nil
 }
 
@@ -119,14 +123,30 @@ func (c *Config) Validate() []string {
 		errs = append(errs, err)
 	}
 
-	// DATABASE_URL must start with postgres://
-	if !strings.HasPrefix(c.DatabaseURL, "postgres://") && !strings.HasPrefix(c.DatabaseURL, "postgresql://") {
-		errs = append(errs, "DATABASE_URL must start with postgres:// or postgresql://")
+	if err := validatePostgresURL(c.DatabaseURL); err != "" {
+		errs = append(errs, err)
 	}
 
-	// BASE_URL: no trailing slash.
-	if c.BaseURL != "" && strings.HasSuffix(c.BaseURL, "/") {
-		errs = append(errs, "BASE_URL must not end with a trailing slash")
+	if err := validateRedisURL(c.RedisURL); err != "" {
+		errs = append(errs, err)
+	}
+
+	if c.BaseURL != "" {
+		if err := validateHTTPURL(c.BaseURL, "BASE_URL"); err != "" {
+			errs = append(errs, err)
+		}
+	}
+
+	if err := validateHTTPURL(c.SourceS3Endpoint, "SOURCE_S3_ENDPOINT"); err != "" {
+		errs = append(errs, err)
+	}
+
+	if err := validateHTTPURL(c.MediaS3Endpoint, "MEDIA_S3_ENDPOINT"); err != "" {
+		errs = append(errs, err)
+	}
+
+	if err := validateOTLPEndpoint(c.OTELEndpoint); err != "" {
+		errs = append(errs, err)
 	}
 
 	if c.Port < 1 || c.Port > 65535 {
@@ -158,6 +178,94 @@ func (c *Config) Validate() []string {
 	}
 
 	return errs
+}
+
+func (c *Config) normalize() {
+	c.BaseURL = normalizeAbsoluteURL(c.BaseURL)
+	c.SourceS3Endpoint = normalizeAbsoluteURL(c.SourceS3Endpoint)
+	c.MediaS3Endpoint = normalizeAbsoluteURL(c.MediaS3Endpoint)
+	if strings.Contains(c.OTELEndpoint, "://") {
+		c.OTELEndpoint = normalizeAbsoluteURL(c.OTELEndpoint)
+	}
+}
+
+func normalizeAbsoluteURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+
+	return strings.TrimRight(strings.TrimSpace(raw), "/")
+}
+
+func validateHTTPURL(raw, name string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Sprintf("%s must be a valid URL: %v", name, err)
+	}
+
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return fmt.Sprintf("%s must use http:// or https://", name)
+	}
+
+	if u.Host == "" {
+		return fmt.Sprintf("%s must include a host", name)
+	}
+
+	return ""
+}
+
+func validatePostgresURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Sprintf("DATABASE_URL must be a valid postgres URL: %v", err)
+	}
+
+	switch strings.ToLower(u.Scheme) {
+	case "postgres", "postgresql":
+	default:
+		return "DATABASE_URL must start with postgres:// or postgresql://"
+	}
+
+	if u.Host == "" {
+		return "DATABASE_URL must include a host"
+	}
+
+	return ""
+}
+
+func validateRedisURL(raw string) string {
+	if _, err := redis.ParseURL(raw); err != nil {
+		return fmt.Sprintf("REDIS_URL must be a valid redis URL: %v", err)
+	}
+
+	return ""
+}
+
+func validateOTLPEndpoint(raw string) string {
+	if raw == "" {
+		return ""
+	}
+
+	if strings.Contains(raw, "://") {
+		return validateHTTPURL(raw, "OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+
+	if strings.ContainsAny(raw, "/?#") {
+		return "OTEL_EXPORTER_OTLP_ENDPOINT without a scheme must be host[:port] only"
+	}
+
+	u, err := url.Parse("//" + raw)
+	if err != nil {
+		return fmt.Sprintf("OTEL_EXPORTER_OTLP_ENDPOINT must be host[:port] or an absolute http(s) URL: %v", err)
+	}
+
+	if u.Host == "" {
+		return "OTEL_EXPORTER_OTLP_ENDPOINT must be host[:port] or an absolute http(s) URL"
+	}
+
+	return ""
 }
 
 // validateHexKey checks that s is a valid hex string decoding to exactly n bytes.

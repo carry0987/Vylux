@@ -73,6 +73,64 @@ func TestValidate_WorkerAndScratchSettings(t *testing.T) {
 	}
 }
 
+func TestValidate_URLSettings(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*Config)
+		wantErrPart string
+	}{
+		{name: "invalid database url host", mutate: func(cfg *Config) { cfg.DatabaseURL = "postgres:///db" }, wantErrPart: "DATABASE_URL must include a host"},
+		{name: "invalid redis url", mutate: func(cfg *Config) { cfg.RedisURL = "://redis" }, wantErrPart: "REDIS_URL must be a valid redis URL"},
+		{name: "invalid base url scheme", mutate: func(cfg *Config) { cfg.BaseURL = "ftp://media.example.com" }, wantErrPart: "BASE_URL must use http:// or https://"},
+		{name: "invalid source endpoint host", mutate: func(cfg *Config) { cfg.SourceS3Endpoint = "https:///bucket" }, wantErrPart: "SOURCE_S3_ENDPOINT must include a host"},
+		{name: "invalid media endpoint scheme", mutate: func(cfg *Config) { cfg.MediaS3Endpoint = "s3://media.example.com" }, wantErrPart: "MEDIA_S3_ENDPOINT must use http:// or https://"},
+		{name: "invalid otel endpoint path without scheme", mutate: func(cfg *Config) { cfg.OTELEndpoint = "collector:4318/v1/traces" }, wantErrPart: "OTEL_EXPORTER_OTLP_ENDPOINT without a scheme must be host[:port] only"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			tt.mutate(cfg)
+
+			errs := cfg.Validate()
+			for _, err := range errs {
+				if strings.Contains(err, tt.wantErrPart) {
+					return
+				}
+			}
+
+			t.Fatalf("expected validation error containing %q, got %v", tt.wantErrPart, errs)
+		})
+	}
+}
+
+func TestNormalize_URLSettings(t *testing.T) {
+	cfg := validConfig()
+	cfg.BaseURL = "https://media.example.com/"
+	cfg.SourceS3Endpoint = "https://source.example.r2.cloudflarestorage.com/"
+	cfg.MediaS3Endpoint = "https://media.example.r2.cloudflarestorage.com/"
+	cfg.OTELEndpoint = "https://otel.example.com/v1/traces/"
+
+	cfg.normalize()
+
+	if cfg.BaseURL != "https://media.example.com" {
+		t.Fatalf("BaseURL = %q, want %q", cfg.BaseURL, "https://media.example.com")
+	}
+	if cfg.SourceS3Endpoint != "https://source.example.r2.cloudflarestorage.com" {
+		t.Fatalf("SourceS3Endpoint = %q, want %q", cfg.SourceS3Endpoint, "https://source.example.r2.cloudflarestorage.com")
+	}
+	if cfg.MediaS3Endpoint != "https://media.example.r2.cloudflarestorage.com" {
+		t.Fatalf("MediaS3Endpoint = %q, want %q", cfg.MediaS3Endpoint, "https://media.example.r2.cloudflarestorage.com")
+	}
+	if cfg.OTELEndpoint != "https://otel.example.com/v1/traces" {
+		t.Fatalf("OTELEndpoint = %q, want %q", cfg.OTELEndpoint, "https://otel.example.com/v1/traces")
+	}
+
+	if errs := cfg.Validate(); len(errs) != 0 {
+		t.Fatalf("expected normalized config to validate cleanly, got %v", errs)
+	}
+}
+
 func validConfig() *Config {
 	return &Config{
 		Port:                   3000,

@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/jobflow"
@@ -293,9 +295,35 @@ func validateJobRequest(r *JobRequest) error {
 	if r.Source == "" {
 		return fmt.Errorf("source is required")
 	}
+	if err := validateCallbackURL(r.CallbackURL); err != nil {
+		return err
+	}
 	if err := validateJobOptions(r.Type, r.Options); err != nil {
 		return err
 	}
+	return nil
+}
+
+func validateCallbackURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("callback_url must be a valid URL: %w", err)
+	}
+
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return fmt.Errorf("callback_url must use http:// or https://")
+	}
+
+	if u.Host == "" {
+		return fmt.Errorf("callback_url must include a host")
+	}
+
 	return nil
 }
 

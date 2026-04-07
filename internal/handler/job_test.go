@@ -127,6 +127,46 @@ func TestValidateJobRequest_VideoFullRejectsFlatOptions(t *testing.T) {
 	}
 }
 
+func TestValidateJobRequest_CallbackURL(t *testing.T) {
+	tests := []struct {
+		name        string
+		callbackURL string
+		wantErrPart string
+	}{
+		{name: "empty allowed", callbackURL: ""},
+		{name: "http allowed", callbackURL: "http://example.com/callback"},
+		{name: "https allowed", callbackURL: "https://example.com/callback"},
+		{name: "reject invalid scheme", callbackURL: "ftp://example.com/callback", wantErrPart: "callback_url must use http:// or https://"},
+		{name: "reject missing host", callbackURL: "https:///callback", wantErrPart: "callback_url must include a host"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := JobRequest{
+				Type:        queue.TypeVideoPreview,
+				Hash:        "hash123",
+				Source:      "uploads/video.mp4",
+				CallbackURL: tt.callbackURL,
+			}
+
+			err := validateJobRequest(&req)
+			if tt.wantErrPart == "" {
+				if err != nil {
+					t.Fatalf("expected callback_url %q to be accepted, got %v", tt.callbackURL, err)
+				}
+				return
+			}
+
+			if err == nil {
+				t.Fatalf("expected callback_url %q to be rejected", tt.callbackURL)
+			}
+			if !strings.Contains(err.Error(), tt.wantErrPart) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErrPart, err)
+			}
+		})
+	}
+}
+
 func TestEnqueueTask_RejectsOversizedVideoSource(t *testing.T) {
 	store := testutil.NewFakeStore()
 	sourcePath := filepath.Join("uploads", "video.mp4")
