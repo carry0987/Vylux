@@ -29,6 +29,28 @@ Vylux is configured almost entirely through environment variables. In practice, 
 | `DATABASE_URL` | yes | none | PostgreSQL DSN; must start with `postgres://` or `postgresql://` |
 | `REDIS_URL` | yes | none | Redis connection string used by asynq, rate limiting, and worker coordination |
 
+## Endpoint values depend on where Vylux runs
+
+`localhost` always refers to the same machine or container as the Vylux process itself. The correct connection values change depending on whether Vylux runs on the host or inside compose.
+
+### Host-run Vylux
+
+- `DATABASE_URL=postgres://...@localhost:5434/...`
+- `REDIS_URL=redis://localhost:6381`
+- `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` can use `http://localhost:9002` for local RustFS
+
+### Compose-run Vylux
+
+- `DATABASE_URL=postgres://...@postgres:5432/...`
+- `REDIS_URL=redis://redis:6379`
+- `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` should use a compose-reachable hostname such as `http://rustfs:9000`, or an external URL
+
+The same rule applies to sidecars. If `cloudflared` runs in Docker, `http://localhost:3100` points back to the tunnel container, not to the `vylux` service.
+
+:::warning `TUNNEL_TOKEN` does not define the origin target
+`TUNNEL_TOKEN` only authenticates the tunnel process. The Cloudflare Tunnel ingress target still has to be configured separately, and when `cloudflared` runs as a compose sidecar it should point to `http://vylux:<PORT>`, not `http://localhost:<PORT>`.
+:::
+
 ## Object storage
 
 | Variable | Required | Default | Description |
@@ -160,6 +182,6 @@ The following values are not consumed directly by the Vylux binary but are used 
 ## R2 and local S3 tips
 
 - For Cloudflare R2, set both `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` to `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, and use `SOURCE_S3_REGION=auto` and `MEDIA_S3_REGION=auto`.
-- For local RustFS testing, set both `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` to `http://localhost:9002`.
+- For local RustFS testing, set both `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` to `http://localhost:9002` only when Vylux itself runs on the host. If Vylux runs in compose, use a container-reachable hostname instead.
 - Vylux uploads S3 objects with CRC32C checksums enabled; keep this in mind when validating compatibility with other S3-like providers.
 - Keep the source bucket read-only and the media bucket read/write when possible.

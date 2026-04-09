@@ -7,11 +7,18 @@ description: "Health, readiness, and Prometheus metrics endpoints."
 
 ## Endpoint overview
 
+### Server / all mode
+
 | Endpoint | Purpose | Auth |
 | --- | --- | --- |
 | `GET /healthz` | liveness probe | none |
 | `GET /readyz` | readiness probe | none |
 | `GET /metrics` | Prometheus metrics for the main HTTP process | none |
+
+### Worker-only mode
+
+| Endpoint | Purpose | Auth |
+| --- | --- | --- |
 | `GET :WORKER_METRICS_PORT/healthz` | liveness for worker-only mode | none |
 | `GET :WORKER_METRICS_PORT/metrics` | Prometheus metrics for worker-only mode | none |
 
@@ -27,6 +34,10 @@ OK
 ```
 
 Use it for liveness, not dependency readiness.
+
+:::tip `/healthz` and `/readyz` are intentionally different
+`/healthz` only tells you the process is alive. A `200` here does not imply PostgreSQL, Redis, or buckets are reachable.
+:::
 
 ## `GET /readyz`
 
@@ -55,6 +66,10 @@ Failures return `503 Service Unavailable` with a short plain-text explanation su
 ```text
 not ready: redis: dial tcp 127.0.0.1:6381: connect: connection refused
 ```
+
+:::warning `/readyz` is a dependency probe
+If `/readyz` fails while `/healthz` succeeds, treat it as an infrastructure or configuration problem first, not as an HTTP routing problem.
+:::
 
 ## `GET /metrics`
 
@@ -86,6 +101,10 @@ When Vylux runs in `--mode=worker`, it starts a lightweight listener on `WORKER_
 - set `WORKER_METRICS_PORT=0` to disable it
 
 This is useful when server and worker run as separate deployments and need separate probes and scraping targets.
+
+:::note Worker-only mode does not expose `/readyz`
+When Vylux runs in `--mode=worker`, use `:WORKER_METRICS_PORT/healthz` for liveness and rely on external dependency monitoring for deeper readiness signals.
+:::
 
 ## Tracing headers
 

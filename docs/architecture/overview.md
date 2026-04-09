@@ -7,13 +7,26 @@ description: "The major Vylux components, runtime boundaries, shared infrastruct
 
 Vylux is not a collection of shell scripts. It is a single binary backed by shared infrastructure: an HTTP server, a queue worker, PostgreSQL, Redis, S3-compatible storage, and the FFmpeg / libvips / Shaka Packager toolchain.
 
+:::tip Read this page as a boundary map
+If you are deciding where a responsibility belongs, start here. Vylux owns media processing and delivery mechanics; your upstream application still owns business authorization and end-user policy.
+:::
+
 ## Runtime roles
 
-The same `vylux` binary currently supports three modes:
+### `all`
 
-- `all`: run the HTTP server and worker together, useful for local development and minimal deployments
-- `server`: run only the HTTP server, synchronous image delivery, playback proxying, and primary metrics
-- `worker`: run only the queue consumer and expose `/metrics` and `/healthz` on `WORKER_METRICS_PORT`
+- runs the HTTP server and worker together
+- useful for local development and minimal deployments
+
+### `server`
+
+- runs only the HTTP server, synchronous image delivery, playback proxying, and primary metrics
+- pair it with a separate worker when scaling or failure isolation matters
+
+### `worker`
+
+- runs only the queue consumer
+- exposes `/metrics` and `/healthz` on `WORKER_METRICS_PORT`
 
 This keeps the implementation model unified while still allowing separate server and worker deployments.
 
@@ -96,6 +109,10 @@ Vylux uses asynq with three named queues:
 | `video:large` | `1` | lower-priority large transcode work |
 
 For video jobs, the `POST /api/jobs` path performs a source-storage preflight check, measures the actual source size, and can route large work to `video:large` before enqueueing.
+
+:::note Queue selection is decided by Vylux, not the caller
+Callers do not choose `critical`, `default`, or `video:large` directly. The server validates the request, inspects the real source object when needed, and then routes the task.
+:::
 
 ## Shared state
 

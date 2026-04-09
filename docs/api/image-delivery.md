@@ -11,11 +11,23 @@ For the complete definitions of `BASE_URL` and `HMAC_SECRET` used by the signing
 
 ## Endpoint overview
 
-| Endpoint | Purpose | Auth | Backing bucket |
-| --- | --- | --- | --- |
-| `GET /img/{sig}/{opts}/{encoded_source}.{format}` | transform an image on demand and cache the result | HMAC-signed URL | reads source bucket, writes image cache into media bucket |
-| `GET /original/{sig}/{encoded_key}` | proxy the original object | HMAC-signed URL | source bucket |
-| `GET /thumb/{sig}/{encoded_key}` | proxy an existing thumbnail or cover | HMAC-signed URL | media bucket |
+### `/img`
+
+- endpoint: `GET /img/{sig}/{opts}/{encoded_source}.{format}`
+- auth: HMAC-signed URL
+- backing storage: reads the source bucket and writes the cached derivative into the media bucket
+
+### `/original`
+
+- endpoint: `GET /original/{sig}/{encoded_key}`
+- auth: HMAC-signed URL
+- backing storage: proxies the source bucket without transforming the object
+
+### `/thumb`
+
+- endpoint: `GET /thumb/{sig}/{encoded_key}`
+- auth: HMAC-signed URL
+- backing storage: proxies an existing thumbnail, cover, or other static media object from the media bucket
 
 ## `GET /img/{sig}/{opts}/{encoded_source}.{format}`
 
@@ -54,6 +66,10 @@ Conceptually, the signature input is:
 ```text
 {canonical_options}/{decoded_source_key}.{canonical_format}
 ```
+
+:::tip Sign the canonical form, not the browser URL
+If your signer and Vylux disagree on option order, decoded object key, or `jpeg` versus `jpg`, the request will fail with `403` even though the browser URL looks plausible.
+:::
 
 ### shell signing and curl example
 
@@ -139,6 +155,10 @@ curl -L "$BASE_URL/thumb/$SIG/$ENCODED_KEY"
 - successful responses include `Access-Control-Allow-Origin: *`
 
 ## Practical guidance
+
+:::warning Keep `HMAC_SECRET` on the trusted side
+Browsers and public clients should receive only the final signed URL. Do not expose `HMAC_SECRET`, and do not ask the browser to construct signatures itself.
+:::
 
 - never expose `HMAC_SECRET` to browsers or public clients
 - generate signed URLs in your upstream application or auth service

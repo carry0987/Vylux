@@ -13,6 +13,10 @@ description: "Health checks, Prometheus metrics, OpenTelemetry tracing, and a pr
 
 Any readiness failure increments `vylux_readiness_failures_total{check=...}`.
 
+:::tip Probe in this order
+When diagnosing a fresh deployment, check `/healthz` first, then `/readyz`, and only then look at application behavior. That separates process startup failures from dependency failures quickly.
+:::
+
 ## Worker metrics
 
 When running worker-only mode, Vylux can expose a separate listener on `WORKER_METRICS_PORT` for worker metrics and basic health checks.
@@ -134,6 +138,22 @@ service:
 
 ## Troubleshooting hints
 
-- `GET /healthz` succeeds but `/readyz` fails: usually PostgreSQL, Redis, or bucket reachability is broken
-- worker metrics are empty: confirm that Vylux is actually running in `--mode=worker` and that `WORKER_METRICS_PORT` is not `0`
-- Jaeger shows no traces: verify that the exporter points to an OTLP HTTP endpoint, not the Jaeger UI port
+:::danger `localhost` health checks fail from the host
+If `curl http://localhost:<PORT>/healthz` returns connection refused, the container port is usually not published to the host, or you are testing the wrong host port.
+:::
+
+:::warning Cloudflare Tunnel returns `502`
+If `cloudflared` logs show `dial tcp [::1]:3100` or `127.0.0.1:3100`, the tunnel origin is pointed at `localhost` inside the tunnel container. Use `http://vylux:<PORT>` instead.
+:::
+
+:::info `/healthz` is green but `/readyz` is red
+This usually means the Vylux process is alive but PostgreSQL, Redis, or bucket reachability is broken.
+:::
+
+:::note Worker metrics are empty
+Confirm that Vylux is actually running in `--mode=worker` and that `WORKER_METRICS_PORT` is not `0`.
+:::
+
+:::tip Jaeger shows no traces
+Verify that the exporter points to an OTLP HTTP endpoint, not the Jaeger UI port.
+:::

@@ -29,6 +29,28 @@ Vylux 主要透過環境變數配置。實作上，CLI `--mode` 會覆蓋 `MODE`
 | `DATABASE_URL` | 是 | 無 | PostgreSQL DSN，必須以 `postgres://` 或 `postgresql://` 開頭 |
 | `REDIS_URL` | 是 | 無 | Redis 連線字串，供 asynq queue、rate limit 與 worker 使用 |
 
+## 連線端點會隨 Vylux 的執行位置改變
+
+`localhost` 永遠只代表 Vylux process 自己所在的那台機器或容器。因此，正確的連線值會跟著 Vylux 是跑在 host 還是 compose 容器內而改變。
+
+### Host-run Vylux
+
+- `DATABASE_URL=postgres://...@localhost:5434/...`
+- `REDIS_URL=redis://localhost:6381`
+- 本機 RustFS 時，`SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 可使用 `http://localhost:9002`
+
+### Compose-run Vylux
+
+- `DATABASE_URL=postgres://...@postgres:5432/...`
+- `REDIS_URL=redis://redis:6379`
+- `SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 應使用 compose 可達的 hostname，例如 `http://rustfs:9000`，或外部 URL
+
+這個規則對 sidecar 也一樣成立。若 `cloudflared` 跑在 Docker 裡，`http://localhost:3100` 只會回到 tunnel 容器自己，不會連到 `vylux`。
+
+:::warning `TUNNEL_TOKEN` 不會幫你決定 origin target
+`TUNNEL_TOKEN` 只負責讓 tunnel process 驗證通過。Cloudflare Tunnel 的 ingress target 仍要另外設定；當 `cloudflared` 以 compose sidecar 方式運行時，origin 應指向 `http://vylux:<PORT>`，而不是 `http://localhost:<PORT>`。
+:::
+
 ## 物件儲存
 
 | 變數 | 必填 | 預設值 | 說明 |
@@ -160,6 +182,6 @@ head -c 16 /dev/urandom | xxd -p -c 32
 ## R2 與本機 S3 提示
 
 - Cloudflare R2：`SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 都設為 `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`，並使用 `SOURCE_S3_REGION=auto` 與 `MEDIA_S3_REGION=auto`
-- RustFS 本機測試：`SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 都設為 `http://localhost:9002`
+- RustFS 本機測試：只有在 Vylux 本身跑在 host 上時，`SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 才應設為 `http://localhost:9002`；若 Vylux 跑在 compose 容器內，請改用容器可達的 hostname
 - Vylux 會在 S3 物件上傳時啟用 CRC32C checksum；若改用其他 S3-like provider，請先驗證其對 checksum header 的相容性
 - source bucket 建議給唯讀權限；media bucket 才給讀寫權限

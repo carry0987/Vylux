@@ -11,6 +11,10 @@ All job-management endpoints live under `/api/*` and require:
 X-API-Key: {internal_api_key}
 ```
 
+:::warning Internal-only surface
+`X-API-Key` is for trusted callers such as your backend, worker control plane, or internal tools. Do not expose it to browsers or third-party clients.
+:::
+
 For the exact meaning of `API_KEY`, `SOURCE_S3_*`, `MEDIA_S3_*`, bucket names, and related runtime settings used by these examples, see [Configuration](../operations/configuration).
 
 ## Auth and rate limits
@@ -65,7 +69,7 @@ This means large-file routing is based on the real source object size, not on a 
 
 ### `options` by job type
 
-#### `image:thumbnail`
+### `image:thumbnail`
 
 ```json
 {
@@ -78,7 +82,7 @@ This means large-file routing is based on the real source object size, not on a 
 
 If `outputs` is omitted, Vylux defaults to a single `thumb` variant at `300w webp`.
 
-#### `video:cover`
+### `video:cover`
 
 ```json
 {
@@ -86,7 +90,7 @@ If `outputs` is omitted, Vylux defaults to a single `thumb` variant at `300w web
 }
 ```
 
-#### `video:preview`
+### `video:preview`
 
 ```json
 {
@@ -100,7 +104,7 @@ If `outputs` is omitted, Vylux defaults to a single `thumb` variant at `300w web
 
 `format` supports `webp` and `gif`.
 
-#### `video:transcode`
+### `video:transcode`
 
 ```json
 {
@@ -108,7 +112,7 @@ If `outputs` is omitted, Vylux defaults to a single `thumb` variant at `300w web
 }
 ```
 
-#### `video:full`
+### `video:full`
 
 `video:full` must use the nested schema. Legacy flat options are rejected.
 
@@ -222,6 +226,8 @@ curl -s \
 - `created_at`
 - `updated_at`
 
+### Transcode result
+
 Typical transcode result payload:
 
 ```json
@@ -246,9 +252,15 @@ Typical transcode result payload:
 }
 ```
 
+### Full workflow result
+
 `video:full` uses a workflow-oriented `results` payload with `stages`, `artifacts`, and `retry_plan`.
 
 ### Turning result fields into public URLs
+
+:::info Job results often contain storage keys, not browser-ready URLs
+If you expose `results.key`, `results.artifacts.cover.key`, or `results.streaming.master_playlist` directly to clients, you will usually leak the wrong abstraction. Convert them into `/thumb`, `/stream`, or tokenized `/api/key` usage first.
+:::
 
 Many result fields are storage keys, not browser-ready public URLs.
 
@@ -273,6 +285,10 @@ For a cross-endpoint walkthrough, see [Integration Guide](../integration-guide).
 ## `POST /api/jobs/{id}/retry`
 
 Only failed jobs can be retried.
+
+:::warning Retry is not a generic rerun button
+If the source job is not in `failed` state, Vylux returns `409 Conflict` rather than creating a duplicate retry chain.
+:::
 
 ### curl example
 
@@ -331,6 +347,10 @@ Payload example:
 ```
 
 Webhook delivery retries up to 5 times with exponential backoff. If all attempts fail, `callback_status` becomes `callback_failed`.
+
+:::tip Treat callbacks as fast acknowledgements
+Return a quick `2xx` response and move database writes, fan-out work, or notifications into your own async path. That keeps Vylux retries focused on delivery problems instead of downstream latency.
+:::
 
 Practical callback expectations:
 

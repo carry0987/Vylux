@@ -11,11 +11,23 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 
 ## 端點總覽
 
-| Endpoint | 用途 | Auth | 後端 bucket |
-| --- | --- | --- | --- |
-| `GET /img/{sig}/{opts}/{encoded_source}.{format}` | 即時轉換圖片並快取 | HMAC URL 簽名 | source bucket 讀取，media bucket 寫快取 |
-| `GET /original/{sig}/{encoded_key}` | 代理原始物件 | HMAC URL 簽名 | source bucket |
-| `GET /thumb/{sig}/{encoded_key}` | 代理既有縮圖或封面 | HMAC URL 簽名 | media bucket |
+### `/img`
+
+- endpoint: `GET /img/{sig}/{opts}/{encoded_source}.{format}`
+- auth: HMAC URL 簽名
+- 後端儲存: 從 source bucket 讀圖，並把衍生快取寫進 media bucket
+
+### `/original`
+
+- endpoint: `GET /original/{sig}/{encoded_key}`
+- auth: HMAC URL 簽名
+- 後端儲存: 不做轉換，直接代理 source bucket 物件
+
+### `/thumb`
+
+- endpoint: `GET /thumb/{sig}/{encoded_key}`
+- auth: HMAC URL 簽名
+- 後端儲存: 從 media bucket 代理既有縮圖、封面或靜態媒體物件
 
 ## `GET /img/{sig}/{opts}/{encoded_source}.{format}`
 
@@ -54,6 +66,10 @@ Vylux 不是直接對瀏覽器 URL 字串做 HMAC，而是對 canonical form 做
 ```text
 {canonical_options}/{decoded_source_key}.{canonical_format}
 ```
+
+:::tip 要簽的是 canonical form，不是瀏覽器看到的原始 URL
+如果 signer 與 Vylux 對 `opts` 順序、decoded object key 或 `jpeg` / `jpg` 的正規化理解不同，就算 URL 看起來合理，也會回 `403`。
+:::
 
 ### shell 簽名與 curl 範例
 
@@ -142,6 +158,10 @@ curl -L "$BASE_URL/thumb/$SIG/$ENCODED_KEY"
 - 成功時回傳對應 MIME type，並帶 `Access-Control-Allow-Origin: *`
 
 ## 快取與簽名實務建議
+
+:::warning `HMAC_SECRET` 必須留在可信任的一側
+瀏覽器與公開客戶端只應拿到最終已簽名 URL，不應持有 `HMAC_SECRET`，也不應自己計算簽名。
+:::
 
 - 不要在前端暴露 `HMAC_SECRET`；簽名應由上游應用或授權服務產生
 - 讓 object key 與輸出格式進入簽名範圍，避免 URL 被竄改後仍可命中

@@ -11,6 +11,10 @@ description: "建立、查詢、回呼與補跑非同步媒體工作的 HTTP API
 X-API-Key: {internal_api_key}
 ```
 
+:::warning 這是 internal-only 的管理面
+`X-API-Key` 應只提供給可信任的呼叫端，例如你的 backend、控制平面或內部工具。不要把它暴露給瀏覽器或第三方客戶端。
+:::
+
 這些範例所依賴的 `API_KEY`、`SOURCE_S3_*`、`MEDIA_S3_*`、bucket 名稱與其他相關執行設定，請見 [設定](../operations/configuration)。
 
 ## 認證與速率限制
@@ -66,7 +70,7 @@ X-API-Key: {internal_api_key}
 
 ### 各 job type 的 `options`
 
-#### `image:thumbnail`
+### `image:thumbnail`
 
 ```json
 {
@@ -79,7 +83,7 @@ X-API-Key: {internal_api_key}
 
 若未提供 `outputs`，系統會預設產生一個 `thumb` 變體：`300w webp`。
 
-#### `video:cover`
+### `video:cover`
 
 ```json
 {
@@ -87,7 +91,7 @@ X-API-Key: {internal_api_key}
 }
 ```
 
-#### `video:preview`
+### `video:preview`
 
 ```json
 {
@@ -101,7 +105,7 @@ X-API-Key: {internal_api_key}
 
 `format` 支援 `webp` 與 `gif`。
 
-#### `video:transcode`
+### `video:transcode`
 
 ```json
 {
@@ -109,7 +113,7 @@ X-API-Key: {internal_api_key}
 }
 ```
 
-#### `video:full`
+### `video:full`
 
 `video:full` 必須使用巢狀 schema，舊版 flat options 會被拒絕：
 
@@ -223,6 +227,8 @@ curl -s \
 - `created_at`
 - `updated_at`
 
+### Transcode result
+
 典型回應：
 
 ```json
@@ -278,6 +284,8 @@ curl -s \
 }
 ```
 
+### Full workflow result
+
 對 `video:full`，`results` 會改為 workflow 結構：
 
 ```json
@@ -304,6 +312,10 @@ curl -s \
 
 ### 如何把結果欄位轉成對外 URL
 
+:::info 很多 job 結果是 storage key，不是可直接給瀏覽器的 URL
+如果你直接把 `results.key`、`results.artifacts.cover.key` 或 `results.streaming.master_playlist` 暴露給 client，通常會把錯誤的抽象層暴露出去。請先把它們轉成 `/thumb`、`/stream` 或帶 token 的 `/api/key` 使用方式。
+:::
+
 很多 `results` 欄位回傳的是 storage key，不是可以直接丟給瀏覽器的 public URL。
 
 實際整合時，建議用下面這個映射：
@@ -327,6 +339,10 @@ curl -s \
 ## `POST /api/jobs/{id}/retry`
 
 只有 `failed` job 可以補跑。
+
+:::warning Retry 不是通用的重新執行按鈕
+如果原 job 不在 `failed` 狀態，Vylux 會回 `409 Conflict`，而不是幫你建立新的 retry 鏈。
+:::
 
 ### curl 範例
 
@@ -385,6 +401,10 @@ payload 範例：
 ```
 
 Webhook delivery 最多會重試 5 次，採 exponential backoff；若最終仍失敗，job 的 `callback_status` 會記為 `callback_failed`。
+
+:::tip 把 callback 當成快速確認機制
+盡量快速回 `2xx`，再把 DB 更新、推播或其他後續處理移到你自己的非同步流程。這樣 Vylux 的重試才會聚焦在真正的 delivery 問題，而不是被下游延遲拖慢。
+:::
 
 實務上建議把 callback 當成快速確認機制：
 

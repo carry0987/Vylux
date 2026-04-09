@@ -16,6 +16,10 @@ The short version is:
 
 If you already know the signing rules, use this page as the map of which endpoint belongs to which use case.
 
+:::tip The core integration rule
+Job results often give you storage keys. Your application is usually responsible for turning those keys into signed `/thumb` URLs, public `/stream/{hash}` entrypoints, or tokenized `/api/key/{hash}` access.
+:::
+
 ## What Vylux does and does not do
 
 Vylux is responsible for:

@@ -16,6 +16,10 @@ description: "把 Vylux 的 job 結果、object key 與對外 URL、簽名請求
 
 如果你已經知道簽名規則，這一頁可以當成「不同 use case 應該走哪個 endpoint」的總覽。
 
+:::tip 整合時最核心的規則
+job 結果常常只會給你 storage key。你的應用通常還需要把它轉成已簽名的 `/thumb` URL、對外的 `/stream/{hash}` 播放入口，或帶 token 的 `/api/key/{hash}` 存取方式。
+:::
+
 ## Vylux 負責什麼，不負責什麼
 
 Vylux 會負責：

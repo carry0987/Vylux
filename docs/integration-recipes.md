@@ -13,19 +13,17 @@ If you have already read [Integration Guide](./integration-guide), these recipes
 
 Use this flow when your application creates a `video:cover` job or reads the `cover` artifact from a `video:full` workflow.
 
-### Goal
+Goal:
 
 Return a browser-safe public URL for the generated cover image without exposing raw bucket paths or `HMAC_SECRET`.
 
-### Flow
+Flow:
 
 1. your backend submits a `video:cover` or `video:full` job with `X-API-Key`
 2. your backend polls the job or receives the callback payload
 3. your backend reads the generated key, for example `videos/mo/movie-2026-04-01/cover.jpg`
 4. your backend signs a `/thumb/{sig}/{encoded_key}` URL with `HMAC_SECRET`
 5. your backend returns that `/thumb/...` URL to the browser
-
-### What the browser should receive
 
 The browser should receive something like:
 
@@ -39,13 +37,13 @@ The browser should not receive:
 - `HMAC_SECRET`
 - a direct storage URL that bypasses Vylux delivery semantics
 
-### Typical backend responsibilities
+Typical backend responsibilities:
 
 - verify that the caller may access the requested media record
 - load the stored cover key from your database or the finished job payload
 - sign the `/thumb` URL just before returning the API response
 
-### Why `/thumb` is the right endpoint here
+Why `/thumb` is the right endpoint here:
 
 Generated covers and thumbnails already exist in the media bucket. They do not need `/img` transformation at read time.
 
@@ -57,11 +55,11 @@ Use `/img` only when you need on-demand transformation from a source-bucket obje
 
 Use this flow when `video:transcode` or `video:full` finished with encryption enabled.
 
-### Goal
+Goal:
 
 Let the player load `/stream/{hash}/master.m3u8` while keeping content-key access behind short-lived Bearer tokens.
 
-### Flow
+Flow:
 
 1. your backend submits the transcode job
 2. your backend waits for `status=completed`
@@ -71,23 +69,19 @@ Let the player load `/stream/{hash}/master.m3u8` while keeping content-key acces
 6. the player fetches playlists and segments from `/stream/{hash}/*`
 7. the player adds `Authorization: Bearer {token}` only when requesting `/api/key/{hash}`
 
-### What your frontend should receive
-
 Your frontend usually needs two values:
 
 - a playlist URL such as `https://media.example.com/stream/movie-2026-04-01/master.m3u8`
 - a short-lived key token for `/api/key/movie-2026-04-01`
 
-### What not to do
+What not to do:
 
 - do not append the key token to the playlist URL query string
 - do not append the key token to segment URLs
 - do not expose `KEY_TOKEN_SECRET` to the browser
 - do not assume `results.streaming.master_playlist` is itself the final public URL
 
-### Recommended backend shape
-
-The simplest production model is:
+Recommended backend shape:
 
 1. your application authenticates the user
 2. your application checks authorization for the requested media hash
@@ -96,14 +90,16 @@ The simplest production model is:
 
 If you prefer, the token may also be issued by a separate internal auth service instead of the main application backend.
 
-### Minimal player contract
-
-Your player integration must support two behaviors:
+Minimal player contract:
 
 - load the playlist from `/stream/{hash}/master.m3u8`
 - inject the `Authorization` header only on `/api/key/` requests
 
 That keeps HLS objects cacheable while leaving key delivery protected.
+
+:::warning The public client should never assemble these URLs from secrets
+In both recipes, your backend or an internal auth/signing service should prepare the final URL or token. Browsers should receive only the final values they need to use.
+:::
 
 ## Cross-check before release
 

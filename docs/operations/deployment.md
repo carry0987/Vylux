@@ -31,6 +31,11 @@ The most common local shape is:
 - RustFS or another S3-compatible storage service
 - Vylux running either on the host or as the image in `all` mode
 
+The repository exposes two different local workflows:
+
+- `docker-compose.dev.yml`: infrastructure only, with Vylux running on the host
+- `docker-compose.yml`: Vylux, PostgreSQL, Redis, and optional Cloudflare Tunnel all running in containers
+
 For example:
 
 ```bash showLineNumbers
@@ -83,12 +88,37 @@ Operational notes:
 - `/var/cache/vylux` is mounted as the dedicated scratch volume
 - the image also sets `TMPDIR=/var/cache/vylux`, so tool-level temp files land on the same workspace
 - there is no separate key tmpfs mount because raw encryption keys are passed directly to Shaka Packager and are not staged as files on disk
+- a `ports:` mapping is only required if you want direct host access such as `http://localhost:3000` or `http://localhost:3100`
 
 Minimal startup:
 
 ```bash
 docker compose up -d --build
 ```
+
+:::tip When `ports:` is optional
+If all external traffic goes through Cloudflare Tunnel, the `vylux` service does not need a host `ports:` mapping. Keep `ports:` only when you also want direct host-side access for local browser or `curl` testing.
+:::
+
+### Container-network semantics
+
+Inside `docker-compose.yml`, each container gets its own `localhost`. That means:
+
+- `localhost` inside the `vylux` container points back to the `vylux` container itself
+- `localhost` inside the `tunnel` container points back to `cloudflared`, not to `vylux`
+- cross-container traffic should use compose service names such as `postgres`, `redis`, and `vylux`
+
+If you run Vylux itself inside compose, do not reuse host-only examples such as `SOURCE_S3_ENDPOINT=http://localhost:9002` unless the storage endpoint is actually reachable from inside that container.
+
+### Cloudflare Tunnel sidecar
+
+:::warning `localhost` is the wrong tunnel origin in Docker
+When `cloudflared` runs in Docker, `http://localhost:3100` points back to the tunnel container itself, not to the `vylux` service.
+:::
+
+The tunnel sidecar shares the compose network with `vylux`, so the origin service should be configured with the compose service name, for example `http://vylux:3100`.
+
+Do not point the tunnel origin at `http://localhost:3100` when `cloudflared` runs in Docker. In that case `localhost` resolves inside the tunnel container and typically produces `502` errors with logs like `dial tcp [::1]:3100: connect: connection refused`.
 
 ## Split mode
 

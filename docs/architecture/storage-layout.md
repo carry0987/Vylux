@@ -17,9 +17,30 @@ There are also two non-bucket state stores:
 - PostgreSQL: job state, workflow results, wrapped encryption keys, and image-cache tracking
 - Redis: queue state and rate-limit counters
 
+:::tip Separate storage references from public URLs
+Most object keys in this page are internal storage paths. Public clients should usually receive signed `/thumb` URLs, `/original` URLs, or `/stream/{hash}` routes instead.
+:::
+
 ## Storage roles
 
 The source store is treated as immutable input. The media store is where Vylux writes processed artifacts and cleanup targets.
+
+### Source store
+
+- configured by `SOURCE_BUCKET` and `SOURCE_S3_*`
+- treated as upstream-owned input
+- Vylux reads from it but should not write derived artifacts back into it
+
+### Media store
+
+- configured by `MEDIA_BUCKET` and `MEDIA_S3_*`
+- stores generated images, covers, previews, manifests, segments, and cache entries
+- Vylux reads and writes here
+
+### State stores
+
+- PostgreSQL stores mutable job, retry, key, and cache-tracking metadata
+- Redis stores queue state and rate-limit counters
 
 ## Media-bucket structure
 
@@ -59,11 +80,7 @@ Real-time image results are written to:
 cache/{processing_hash}.{format}
 ```
 
-`processing_hash` is derived from:
-
-- the source object key
-- width / height / quality
-- output format
+`processing_hash` is derived from the source object key, width, height, quality, and output format.
 
 ### Asynchronous image thumbnails
 
@@ -137,6 +154,10 @@ videos/{hash_prefix}/{hash}/{filePath}
 ```
 
 where `filePath` is the remainder after `/stream/{hash}/`.
+
+:::note `/stream/{hash}` is the stable playback-facing contract
+The media bucket may store `videos/{prefix}/{hash}/master.m3u8`, but externally the preferred playback entrypoint is `/stream/{hash}/master.m3u8`.
+:::
 
 ## What does not live in object storage
 

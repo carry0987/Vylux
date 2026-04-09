@@ -17,13 +17,26 @@ Current core capabilities include:
 - encrypted playback with Bearer-token key delivery through `/api/key/{hash}`
 - PostgreSQL job state, Redis queues, Prometheus metrics, and OpenTelemetry tracing
 
+:::tip Start from the page that matches your job
+Most confusion comes from reading an API page before you have chosen your deployment shape or trust boundary. Pick the path below that matches what you are actually trying to do.
+:::
+
 ## Runtime shapes
 
-The Vylux binary supports three runtime modes:
+### `all`
 
-- `all`: run the HTTP server and the worker in one process
-- `server`: run only the HTTP server, image delivery, and playback endpoints
-- `worker`: run only the queue consumer and the worker metrics listener
+- runs the HTTP server and the worker in one process
+- best for local development, staging, and smaller single-node deployments
+
+### `server`
+
+- runs only the HTTP server, image delivery endpoints, playback routes, and main metrics surface
+- pair this with a separate worker when you want cleaner scaling and failure isolation
+
+### `worker`
+
+- runs only the queue consumer and the worker metrics listener
+- use this when FFmpeg, libvips, and packaging workloads should scale independently from HTTP traffic
 
 This lets you use the same image for local development, Docker Compose, single-node deployments, and split server/worker layouts on Kubernetes.
 
@@ -40,12 +53,23 @@ This lets you use the same image for local development, Docker Compose, single-n
 
 ## Recommended reading path
 
+### First run
+
 1. Start with [Getting Started](./getting-started)
-2. Read [Integration Guide](./integration-guide) to understand how job results become public URLs, signed requests, and playback flows
-3. Continue with [Configuration](./operations/configuration) and [Deployment](./operations/deployment)
-4. If you are integrating APIs, read [Jobs API](./api/jobs) and [Image Delivery API](./api/image-delivery)
-5. If you care about playback integration, read [Playback API](./api/playback) and [Encrypted Streaming](./media/encrypted-streaming)
-6. If you operate the service, continue with [Observability](./operations/observability)
+2. Continue with [Configuration](./operations/configuration) and [Deployment](./operations/deployment)
+3. Finish with [Observability](./operations/observability) once the service is reachable
+
+### Application integration
+
+1. Read [Integration Guide](./integration-guide)
+2. Continue with [Jobs API](./api/jobs) and [Image Delivery API](./api/image-delivery)
+3. If you need streaming or DRM-style flows, continue with [Playback API](./api/playback) and [Encrypted Streaming](./media/encrypted-streaming)
+
+### Operations
+
+1. Read [Deployment](./operations/deployment)
+2. Continue with [Configuration](./operations/configuration)
+3. Use [System Endpoints](./api/system) and [Observability](./operations/observability) for probes, metrics, and troubleshooting
 
 ## Docs scope
 

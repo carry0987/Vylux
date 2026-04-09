@@ -7,11 +7,18 @@ description: "健康檢查、readiness 與 Prometheus metrics 端點。"
 
 ## 端點總覽
 
+### Server / all mode
+
 | Endpoint | 用途 | Auth |
 | --- | --- | --- |
 | `GET /healthz` | liveness probe | 無 |
 | `GET /readyz` | readiness probe | 無 |
 | `GET /metrics` | 主 HTTP process 的 Prometheus metrics | 無 |
+
+### Worker-only mode
+
+| Endpoint | 用途 | Auth |
+| --- | --- | --- |
 | `GET :WORKER_METRICS_PORT/healthz` | worker-only process 的 liveness | 無 |
 | `GET :WORKER_METRICS_PORT/metrics` | worker-only process 的 Prometheus metrics | 無 |
 
@@ -27,6 +34,10 @@ OK
 ```
 
 適合用於 liveness probe，不代表下游依賴已就緒。
+
+:::tip `/healthz` 與 `/readyz` 本來就代表不同意義
+`/healthz` 只表示 process 還活著。這裡回 `200`，不代表 PostgreSQL、Redis 或 buckets 一定可連。
+:::
 
 ## `GET /readyz`
 
@@ -55,6 +66,10 @@ OK
 ```text
 not ready: redis: dial tcp 127.0.0.1:6381: connect: connection refused
 ```
+
+:::warning `/readyz` 是依賴探針
+如果 `/healthz` 成功但 `/readyz` 失敗，優先把它當成基礎設施或設定問題，而不是 HTTP 路由問題。
+:::
 
 ## `GET /metrics`
 
@@ -86,6 +101,10 @@ curl -s http://localhost:3000/metrics | rg '^vylux_'
 - `WORKER_METRICS_PORT=0` 時停用
 
 這讓 K8s 或其他平台可以把 worker 跟 HTTP server 分開探測與抓取 metrics。
+
+:::note worker-only mode 不會暴露 `/readyz`
+當 Vylux 以 `--mode=worker` 運行時，請用 `:WORKER_METRICS_PORT/healthz` 做 liveness，較深層的 readiness 則交給外部依賴監控。
+:::
 
 ## 追蹤 header
 

@@ -17,9 +17,30 @@ Vylux 使用兩個邏輯上的 storage 角色：
 - PostgreSQL：保存 job state、workflow results、wrapped encryption keys、image cache tracking
 - Redis：保存 queue state 與 rate limit 狀態
 
+:::tip 把 storage reference 與 public URL 分開看
+本頁大多數 object key 都是內部儲存路徑。對外客戶端通常應拿到的是已簽名的 `/thumb`、`/original`，或 `/stream/{hash}` 這類穩定 public route。
+:::
+
 ## Storage 角色
 
 source store 被視為不可變的輸入來源。media store 則是 Vylux 寫入處理結果與 cleanup 目標的位置。
+
+### Source store
+
+- 由 `SOURCE_BUCKET` 與 `SOURCE_S3_*` 設定
+- 被視為上游擁有的輸入來源
+- Vylux 只應讀取，不應把衍生輸出寫回去
+
+### Media store
+
+- 由 `MEDIA_BUCKET` 與 `MEDIA_S3_*` 設定
+- 保存生成圖片、cover、preview、manifest、segment 與 cache entries
+- Vylux 會在這裡讀寫
+
+### State stores
+
+- PostgreSQL 保存可變的 job、retry、key 與 cache-tracking metadata
+- Redis 保存 queue state 與 rate-limit counters
 
 ## 媒體儲存桶結構
 
@@ -59,11 +80,7 @@ media-bucket/
 cache/{processing_hash}.{format}
 ```
 
-這裡的 `processing_hash` 來自：
-
-- source object key
-- width / height / quality
-- output format
+這裡的 `processing_hash` 來自 source object key、width、height、quality 與 output format。
 
 ### 非同步圖片 thumbnail
 
@@ -137,6 +154,10 @@ videos/{hash_prefix}/{hash}/{filePath}
 ```
 
 其中 `filePath` 就是 `/stream/{hash}/` 後面的相對路徑。
+
+:::note `/stream/{hash}` 才是穩定的播放對外契約
+media bucket 內部可能儲存的是 `videos/{prefix}/{hash}/master.m3u8`，但對外播放入口仍應優先使用 `/stream/{hash}/master.m3u8`。
+:::
 
 ## 什麼不在 bucket 內
 

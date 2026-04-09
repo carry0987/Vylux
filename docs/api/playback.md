@@ -7,10 +7,17 @@ description: "Route layout, authorization model, and curl examples for `/stream/
 
 ## Endpoint overview
 
-| Endpoint | Purpose | Auth |
-| --- | --- | --- |
-| `GET /stream/{hash}/*` | proxy HLS playlists, init segments, and media segments | none |
-| `GET /api/key/{hash}` | return the 16-byte content key for encrypted HLS playback | `Authorization: Bearer {token}` |
+### Playlist and segments
+
+- endpoint: `GET /stream/{hash}/*`
+- auth: none
+- purpose: proxy HLS playlists, init segments, and media segments from the media bucket
+
+### Key delivery
+
+- endpoint: `GET /api/key/{hash}`
+- auth: `Authorization: Bearer {token}`
+- purpose: return the 16-byte content key for encrypted HLS playback
 
 ## `GET /stream/{hash}/*`
 
@@ -49,6 +56,10 @@ curl -I \
 - currently sets `Cache-Control: public, max-age=31536000, immutable`
 - returns `Access-Control-Allow-Origin: *`
 
+:::tip Start playback from the master playlist
+For public playback, the normal entrypoint is `/stream/{hash}/master.m3u8`. Treat the object keys stored in job results as backing storage paths, not as browser-facing URLs.
+:::
+
 ## `GET /api/key/{hash}`
 
 `GET /api/key/{hash}`
@@ -58,6 +69,10 @@ This endpoint does not use `X-API-Key`. It only accepts:
 ```text
 Authorization: Bearer {token}
 ```
+
+:::warning Do not move playback secrets into the browser
+`/api/key/{hash}` is intentionally separated from `X-API-Key`. Keep `KEY_TOKEN_SECRET` in a trusted backend or auth service, and never place Bearer tokens into playlist URLs or segment URLs.
+:::
 
 For the exact meaning of `KEY_TOKEN_SECRET` and related playback configuration such as `BASE_URL`, see [Configuration](../operations/configuration).
 

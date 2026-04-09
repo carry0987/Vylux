@@ -16,6 +16,18 @@ If you use the repository Docker image directly, the runtime already contains `f
 
 ## Recommended local development flow
 
+### Host-run Vylux
+
+Use `docker-compose.dev.yml` for infrastructure only, then run Vylux on the host with `go run ./cmd/vylux`.
+
+In this workflow, `localhost` inside `DATABASE_URL`, `REDIS_URL`, `SOURCE_S3_ENDPOINT`, and `MEDIA_S3_ENDPOINT` refers to your Mac, so host-mapped ports such as `localhost:5434` and `localhost:9002` are correct.
+
+### Compose-run Vylux
+
+Use the repository `docker-compose.yml` when Vylux itself should also run inside Docker.
+
+In that workflow, `localhost` inside Vylux no longer points to your Mac. Use container-reachable addresses such as compose service names or an external endpoint instead.
+
 ### 1. Start the infrastructure services
 
 ```bash
@@ -50,6 +62,12 @@ MEDIA_S3_REGION=auto
 MEDIA_BUCKET=media-bucket
 BASE_URL=http://localhost:3000
 ```
+
+Those `localhost` values are correct only when the Vylux process itself runs on the host. If Vylux runs in a container, `localhost` refers to that container.
+
+:::warning Reusing host-only values in containers
+If you copy `SOURCE_S3_ENDPOINT=http://localhost:9002` or `REDIS_URL=redis://localhost:6381` into a containerized Vylux deployment, those addresses will resolve inside the container itself and usually fail.
+:::
 
 The most important required settings are:
 
@@ -130,7 +148,11 @@ If `brew install` reports that both packages are already installed, rerun `go cl
 
 ### 5. Validate service health
 
-Check liveness, readiness, and metrics first:
+:::tip Validate in layers
+Check probe endpoints first, then exercise the Jobs API, and only then inspect the returned media URLs. That order separates process problems, dependency problems, and integration problems much faster.
+:::
+
+### Server / all mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3000/healthz
@@ -138,7 +160,7 @@ curl -i http://localhost:3000/readyz
 curl -s http://localhost:3000/metrics | rg '^vylux_'
 ```
 
-If you also run worker-only mode:
+### Worker-only mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3001/healthz
@@ -190,6 +212,10 @@ At this point, do not stop at the storage key alone:
 - if encrypted playback is enabled, mint a Bearer token for `/api/key/{hash}` and attach it only on key requests
 
 For the full mapping from job results to public URLs, see [Integration Guide](./integration-guide).
+
+:::warning Do not stop at the storage key
+If a job result contains a media-bucket key, that usually is not the final public URL. Convert it into a signed `/thumb` URL or a `/stream/{hash}` playback entrypoint before handing it to a browser.
+:::
 
 Before release, cover at least these three smoke-test groups:
 

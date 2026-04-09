@@ -16,6 +16,18 @@ description: "用最短路徑在本機啟動 Vylux、準備依賴、建立第一
 
 ## 本機開發建議流程
 
+### Host-run Vylux
+
+使用 `docker-compose.dev.yml` 只啟動基礎設施，然後在 host 上以 `go run ./cmd/vylux` 執行 Vylux。
+
+這種流程下，`DATABASE_URL`、`REDIS_URL`、`SOURCE_S3_ENDPOINT`、`MEDIA_S3_ENDPOINT` 裡的 `localhost` 都是指向你的 Mac，因此 `localhost:5434`、`localhost:9002` 這類 host 映射位址是正確的。
+
+### Compose-run Vylux
+
+使用 repo 內的 `docker-compose.yml`，讓 Vylux 本體也一起跑在 Docker 裡。
+
+這種流程下，Vylux 看到的 `localhost` 已經不再是你的 Mac，而是 Vylux 容器自己；此時應改用 compose service name 或外部 endpoint。
+
 ### 1. 啟動基礎設施
 
 ```bash
@@ -50,6 +62,12 @@ MEDIA_S3_REGION=auto
 MEDIA_BUCKET=media-bucket
 BASE_URL=http://localhost:3000
 ```
+
+這些 `localhost` 設定只有在 Vylux process 本身跑在 host 上時才正確。若 Vylux 跑在容器內，`localhost` 指的就是那個容器自己。
+
+:::warning 不要把 host-only 設定直接搬進容器
+如果你把 `SOURCE_S3_ENDPOINT=http://localhost:9002` 或 `REDIS_URL=redis://localhost:6381` 直接複製到容器化的 Vylux 部署，這些位址會在容器內解析成它自己，通常就會連線失敗。
+:::
 
 必填且最容易漏掉的設定組如下：
 
@@ -130,7 +148,11 @@ go run ./cmd/vylux
 
 ### 5. 驗證服務是否可用
 
-先檢查 liveness、readiness 與 metrics：
+:::tip 分層驗證會更快定位問題
+先看 probe 端點，再打 Jobs API，最後才檢查回傳的媒體 URL。這樣可以比較快把 process、依賴、整合邏輯三類問題分開。
+:::
+
+### Server / all mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3000/healthz
@@ -138,7 +160,7 @@ curl -i http://localhost:3000/readyz
 curl -s http://localhost:3000/metrics | rg '^vylux_'
 ```
 
-如果你以 `--mode=worker` 單獨啟動 worker，還可以檢查：
+### Worker-only mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3001/healthz
@@ -193,6 +215,10 @@ curl -s \
 - 若開啟加密播放，還需要額外產生 `/api/key/{hash}` 用的 Bearer token，且只在 key 請求上附加
 
 完整的 job 結果到對外 URL 映射，請看 [整合導覽](./integration-guide)。
+
+:::warning 不要看到 storage key 就停下來
+如果 job 結果裡出現 media-bucket key，通常那還不是最終對外 URL。請先把它轉成已簽名的 `/thumb` URL，或 `/stream/{hash}` 的播放入口，再交給瀏覽器。
+:::
 
 發布前至少應覆蓋這三組 smoke test：
 

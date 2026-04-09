@@ -31,6 +31,11 @@ CMD ["--mode=all"]
 - RustFS 或其他 S3-compatible storage
 - Vylux host process，或直接跑 `all` mode image
 
+repo 目前其實提供兩種不同的本機流程：
+
+- `docker-compose.dev.yml`：只起基礎設施，Vylux 本體跑在 host 上
+- `docker-compose.yml`：Vylux、PostgreSQL、Redis 與可選 Cloudflare Tunnel 都跑在容器內
+
 ```bash showLineNumbers
 docker compose -f docker-compose.dev.yml up -d
 go run ./cmd/vylux
@@ -85,12 +90,37 @@ repo 目前提供的 `docker-compose.yml` 也是用單一 `vylux` service 跑預
 - `/var/cache/vylux` 掛為獨立 scratch volume
 - image 內的 `TMPDIR` 也指向 `/var/cache/vylux`，避免大型暫存資料散落在其他 temp 路徑
 - 不再需要獨立的 key tmpfs，因為 raw encryption key 直接透過 Shaka Packager CLI 參數傳遞，不會先落成磁碟檔案
+- 只有當你需要直接從 host 存取 `http://localhost:3000` 或 `http://localhost:3100` 時，才需要 `ports:` 映射
 
 最小啟動命令：
 
 ```bash
 docker compose up -d --build
 ```
+
+:::tip 什麼時候 `ports:` 是可省略的
+如果所有對外流量都只走 Cloudflare Tunnel，`vylux` service 就不需要 host `ports:` 映射。只有當你還想保留本機瀏覽器或 `curl` 直接測試時，才需要保留 `ports:`。
+:::
+
+### 容器網路語意
+
+在 `docker-compose.yml` 裡，每個容器都有自己的 `localhost`。也就是說：
+
+- `vylux` 容器裡的 `localhost` 只會回到 `vylux` 自己
+- `tunnel` 容器裡的 `localhost` 只會回到 `cloudflared` 自己，不會連到 `vylux`
+- 跨容器連線應使用 compose service name，例如 `postgres`、`redis`、`vylux`
+
+因此，如果你讓 Vylux 本身跑在 compose 內，就不能直接沿用 host-only 範例中的 `SOURCE_S3_ENDPOINT=http://localhost:9002`，除非那個 storage endpoint 對該容器來說真的可達。
+
+### Cloudflare Tunnel sidecar
+
+:::warning 在 Docker 裡，`localhost` 不是正確的 tunnel origin
+當 `cloudflared` 跑在 Docker 裡時，`http://localhost:3100` 指向的是 tunnel 容器自己，不是 `vylux` service。
+:::
+
+tunnel sidecar 與 `vylux` 共用 compose network，因此 origin service 應設成 compose service name，例如 `http://vylux:3100`。
+
+如果 `cloudflared` 跑在 Docker 裡，不要把 tunnel origin 指到 `http://localhost:3100`。這樣的 `localhost` 會解析到 tunnel 容器自己，通常會得到 `502`，並在日誌中看到 `dial tcp [::1]:3100: connect: connection refused`。
 
 ## server / worker 拆分部署
 
