@@ -49,25 +49,25 @@
     color: var(--ifm-color-primary);
 }
 
-[data-theme='dark'] .sectionHeader p {
+[data-theme="dark"] .sectionHeader p {
     color: var(--ifm-color-emphasis-350);
 }
 
-[data-theme='dark'] .featureEyebrow {
+[data-theme="dark"] .featureEyebrow {
     color: var(--ifm-color-primary-lightest);
 }
 
-[data-theme='dark'] .featureCard {
+[data-theme="dark"] .featureCard {
     border-color: rgba(52, 201, 193, 0.2);
     background: linear-gradient(180deg, rgba(15, 22, 28, 0.96), rgba(10, 16, 21, 0.92));
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
 }
 
-[data-theme='dark'] .featureCard h3 {
+[data-theme="dark"] .featureCard h3 {
     color: #ffffff;
 }
 
-[data-theme='dark'] .featureCard p:last-child {
+[data-theme="dark"] .featureCard p:last-child {
     color: var(--ifm-color-emphasis-350);
 }
 

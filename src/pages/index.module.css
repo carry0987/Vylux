@@ -91,57 +91,57 @@
     background: rgba(255, 255, 255, 0.4);
 }
 
-[data-theme='dark'] .heroBanner {
+[data-theme="dark"] .heroBanner {
     background:
         radial-gradient(circle at 15% 20%, rgba(52, 201, 193, 0.2), transparent 28%),
         radial-gradient(circle at 85% 18%, rgba(243, 157, 62, 0.16), transparent 26%),
         linear-gradient(180deg, rgba(9, 14, 18, 0.98), rgba(14, 21, 28, 0.94));
 }
 
-[data-theme='dark'] .heroTitle {
+[data-theme="dark"] .heroTitle {
     color: #ffffff;
 }
 
-[data-theme='dark'] .kicker {
+[data-theme="dark"] .kicker {
     color: var(--ifm-color-primary-lightest);
 }
 
-[data-theme='dark'] .heroSubtitle {
+[data-theme="dark"] .heroSubtitle {
     color: var(--ifm-color-emphasis-350);
 }
 
-[data-theme='dark'] .heroPanel {
+[data-theme="dark"] .heroPanel {
     border-color: rgba(124, 221, 216, 0.14);
     background: rgba(12, 18, 23, 0.76);
     box-shadow: 0 20px 45px rgba(0, 0, 0, 0.24);
 }
 
-[data-theme='dark'] .panelLabel {
+[data-theme="dark"] .panelLabel {
     color: var(--ifm-color-primary-lightest);
 }
 
-[data-theme='dark'] .panelList li {
+[data-theme="dark"] .panelList li {
     color: var(--ifm-color-emphasis-350);
 }
 
-[data-theme='dark'] .buttons :global(.button.button--outline) {
+[data-theme="dark"] .buttons :global(.button.button--outline) {
     border-color: rgba(52, 201, 193, 0.4);
     color: #ffffff;
     background: rgba(255, 255, 255, 0.05);
 }
 
-[data-theme='dark'] .buttons :global(.button.button--primary) {
+[data-theme="dark"] .buttons :global(.button.button--primary) {
     background-color: var(--ifm-color-primary);
     color: #0c1217;
     font-weight: 700;
 }
 
-[data-theme='dark'] .buttons :global(.button.button--primary:hover) {
+[data-theme="dark"] .buttons :global(.button.button--primary:hover) {
     background-color: var(--ifm-color-primary-light);
     color: #0c1217;
 }
 
-[data-theme='dark'] .buttons :global(.button.button--outline:hover) {
+[data-theme="dark"] .buttons :global(.button.button--outline:hover) {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
 }
