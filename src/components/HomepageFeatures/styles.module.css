@@ -70,3 +70,9 @@
 [data-theme='dark'] .featureCard p:last-child {
     color: var(--ifm-color-emphasis-350);
 }
+
+@media screen and (max-width: 996px) {
+    .featureCol + .featureCol {
+        margin-top: 1rem;
+    }
+}
