@@ -10,7 +10,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.0
 	github.com/cshum/vipsgen v1.3.9
 	github.com/hibiken/asynq v0.26.0
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v5 v5.1.0
 	github.com/pressly/goose/v3 v3.27.0
