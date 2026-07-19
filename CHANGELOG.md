@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.0](https://github.com/carry0987/Vylux/compare/v1.1.0...v1.2.0) (2026-07-19)
+
+
+### Features
+
+* standardize canceled job status across jobs and queue flow ([3a7e638](https://github.com/carry0987/Vylux/commit/3a7e638d8b3dc5a3e576c59f3edb28c0a698ae03))
+
+
+### Bug Fixes
+
+* **ci:** Add formatting & tidy ([3748a81](https://github.com/carry0987/Vylux/commit/3748a816fe4088620f98179158867f16c9fdbbc6))
+* Update packages ([c57ce23](https://github.com/carry0987/Vylux/commit/c57ce234e3af267f28bfebc23b9a217ac9d92788))
+* Update Shaka Packager to v3.9.2 ([b80608c](https://github.com/carry0987/Vylux/commit/b80608cecf158f2b8b967eff21f757eeff49764f))
+
 ## [1.1.0](https://github.com/carry0987/Vylux/compare/v1.0.0...v1.1.0) (2026-04-07)
 
 
