@@ -46,7 +46,7 @@ func Shutdown() {
 // It uses ThumbnailBuffer for shrink-on-load when resizing is requested.
 // For animated images, ThumbnailBuffer with Crop breaks the frame stack,
 // so when both width and height are specified we use ThumbnailBuffer for
-// cover-scaling then ExtractAreaMultiPage for per-frame centre crop.
+// cover-scaling then ExtractAreaMultiPage for per-frame center crop.
 func Process(src []byte, opts Options) ([]byte, error) {
 	var img *vips.Image
 	var err error
@@ -108,7 +108,7 @@ func Process(src []byte, opts Options) ([]byte, error) {
 }
 
 // animatedCoverCrop loads all animation frames, scales to cover the target
-// dimensions, then centre-crops each frame with ExtractAreaMultiPage.
+// dimensions, then center-crops each frame with ExtractAreaMultiPage.
 func animatedCoverCrop(src []byte, wantW, wantH int) (*vips.Image, error) {
 	// Probe original dimensions for cover-scale calculation.
 	probe, err := vips.NewImageFromBuffer(src, &vips.LoadOptions{N: -1})
@@ -131,7 +131,7 @@ func animatedCoverCrop(src []byte, wantW, wantH int) (*vips.Image, error) {
 		return nil, err
 	}
 
-	// Centre crop each frame to exact target dimensions.
+	// Center crop each frame to exact target dimensions.
 	cropLeft := (img.Width() - wantW) / 2
 	cropTop := (img.PageHeight() - wantH) / 2
 	if cropLeft < 0 {

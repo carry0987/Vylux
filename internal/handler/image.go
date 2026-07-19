@@ -261,7 +261,7 @@ func (h *ImageHandler) fetchFromStorage(ctx context.Context, store storage.Stora
 func processingHash(source string, opts image.Options) string {
 	h := sha256.New()
 	h.Write([]byte(source))
-	h.Write([]byte(fmt.Sprintf("/w%d_h%d_q%d.%s", opts.Width, opts.Height, opts.EffectiveQuality(), opts.Format.Ext())))
+	_, _ = fmt.Fprintf(h, "/w%d_h%d_q%d.%s", opts.Width, opts.Height, opts.EffectiveQuality(), opts.Format.Ext())
 	return hex.EncodeToString(h.Sum(nil))
 }
 

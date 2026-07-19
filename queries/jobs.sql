@@ -7,7 +7,7 @@ SELECT * FROM jobs WHERE id = $1;
 
 -- name: GetActiveJobByFingerprint :one
 SELECT * FROM jobs
-WHERE request_fingerprint = $1 AND status NOT IN ('failed', 'cancelled')
+WHERE request_fingerprint = $1 AND status NOT IN ('failed', 'canceled')
 ORDER BY created_at DESC
 LIMIT 1;
 

@@ -50,7 +50,7 @@ func NewServer(port int) *Server {
 	}
 }
 
-// Start runs the metrics server until the context is cancelled.
+// Start runs the metrics server until the context is canceled.
 func (s *Server) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 

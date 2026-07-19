@@ -53,7 +53,7 @@ func NewClient(secret string, queries *dbq.Queries) *Client {
 }
 
 // Deliver sends a webhook callback with exponential backoff retries.
-func (c *Client) Deliver(ctx context.Context, jobID string, callbackURL string, payload CallbackPayload) {
+func (c *Client) Deliver(ctx context.Context, jobID string, callbackURL string, payload *CallbackPayload) {
 	if callbackURL == "" {
 		return
 	}
@@ -100,7 +100,7 @@ func (c *Client) Deliver(ctx context.Context, jobID string, callbackURL string, 
 		if attempt < maxRetries {
 			select {
 			case <-ctx.Done():
-				slog.Error("webhook delivery cancelled", apptracing.LogFields(ctx, "job_id", jobID)...)
+				slog.Error("webhook delivery canceled", apptracing.LogFields(ctx, "job_id", jobID)...)
 				c.markStatus(apptracing.BackgroundContext(ctx), jobID, "callback_failed")
 				return
 			case <-time.After(backoff):
@@ -138,8 +138,12 @@ func (c *Client) send(ctx context.Context, url string, body []byte, sig string) 
 		return fmt.Errorf("http request: %w", err)
 	}
 	defer func() {
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
+		if _, copyErr := io.Copy(io.Discard, resp.Body); copyErr != nil {
+			slog.Debug("webhook response drain failed", apptracing.LogFields(ctx, "error", copyErr)...)
+		}
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Debug("webhook response close failed", apptracing.LogFields(ctx, "error", closeErr)...)
+		}
 	}()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

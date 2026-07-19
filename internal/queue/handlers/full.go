@@ -84,7 +84,7 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 			result.Stages.Preview = skippedStage("blocked_by_source_failure")
 			result.Stages.Transcode = skippedStage("blocked_by_source_failure")
 			setRetryPlan(&result, jobflow.RetryStrategyRetryJob, []string{queue.TypeVideoFull}, []string{jobflow.StageSource}, "source download failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 		defer cleanupSrc()
 		result.Stages.Source = readyStage()
@@ -211,8 +211,8 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 
 		if result.Stages.Cover.Status == jobflow.StatusFailed || result.Stages.Preview.Status == jobflow.StatusFailed {
 			result.Stages.Transcode = skippedStage("blocked_by_failed_dependencies")
-			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, retryTasksForCoverPreview(result), retryStagesForCoverPreview(result), "cover/preview stage failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, retryTasksForCoverPreview(&result), retryStagesForCoverPreview(&result), "cover/preview stage failed")
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 
 		d.setProgress(ctx, taskID, 25)
@@ -222,14 +222,14 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 		if err != nil {
 			result.Stages.Transcode = failedStage("prepare_failed", err.Error())
 			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, []string{queue.TypeVideoTranscode}, []string{jobflow.StageTranscode}, "transcode preparation failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 
 		outDir, err := os.MkdirTemp(scratchDir, "vylux-hls-*")
 		if err != nil {
 			result.Stages.Transcode = failedStage("prepare_failed", fmt.Sprintf("create temp dir: %v", err))
 			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, []string{queue.TypeVideoTranscode}, []string{jobflow.StageTranscode}, "transcode preparation failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 		defer os.RemoveAll(outDir)
 
@@ -251,7 +251,7 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 				span.End()
 				result.Stages.Transcode = failedStage("encryption_setup_failed", fmt.Sprintf("setup encryption: %v", err))
 				setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, []string{queue.TypeVideoTranscode}, []string{jobflow.StageTranscode}, "transcode stage failed")
-				return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+				return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 			}
 			span.End()
 
@@ -278,13 +278,13 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 			attribute.Int("video.audio_track_count", 1),
 			attribute.Bool("video.encrypt", encrypt),
 		)
-		tcResults, err := video.Transcode(transcodeCtx, tmpPath, outDir, transcodeOpts)
+		tcResults, err := video.Transcode(transcodeCtx, tmpPath, outDir, &transcodeOpts)
 		if err != nil {
 			recordSpanError(span, err)
 			span.End()
 			result.Stages.Transcode = failedStage("transcode_failed", fmt.Sprintf("transcode: %v", err))
 			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, []string{queue.TypeVideoTranscode}, []string{jobflow.StageTranscode}, "transcode stage failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 		span.SetAttributes(
 			attribute.Int("video.variant_count", len(tcResults.VideoTracks)),
@@ -299,7 +299,7 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 		if err != nil {
 			result.Stages.Transcode = failedStage("upload_failed", fmt.Sprintf("upload HLS: %v", err))
 			setRetryPlan(&result, jobflow.RetryStrategyRetryTasks, []string{queue.TypeVideoTranscode}, []string{jobflow.StageTranscode}, "transcode upload failed")
-			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(result), result)
+			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 
 		d.setProgress(ctx, taskID, 95)
@@ -344,7 +344,7 @@ func setRetryPlan(result *jobflow.VideoFullResult, strategy string, jobTypes []s
 	}
 }
 
-func retryTasksForCoverPreview(result jobflow.VideoFullResult) []string {
+func retryTasksForCoverPreview(result *jobflow.VideoFullResult) []string {
 	tasks := make([]string, 0, 3)
 	if result.Stages.Cover.Status == jobflow.StatusFailed {
 		tasks = append(tasks, queue.TypeVideoCover)
@@ -356,7 +356,7 @@ func retryTasksForCoverPreview(result jobflow.VideoFullResult) []string {
 	return tasks
 }
 
-func retryStagesForCoverPreview(result jobflow.VideoFullResult) []string {
+func retryStagesForCoverPreview(result *jobflow.VideoFullResult) []string {
 	stages := make([]string, 0, 3)
 	if result.Stages.Cover.Status == jobflow.StatusFailed {
 		stages = append(stages, jobflow.StageCover)
@@ -368,7 +368,7 @@ func retryStagesForCoverPreview(result jobflow.VideoFullResult) []string {
 	return stages
 }
 
-func videoFullFailureError(result jobflow.VideoFullResult) error {
+func videoFullFailureError(result *jobflow.VideoFullResult) error {
 	failed := make([]string, 0, 3)
 	for _, item := range []struct {
 		name   string

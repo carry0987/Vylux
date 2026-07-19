@@ -22,7 +22,11 @@ type TranscodeOptions struct {
 
 // Transcode encodes split audio/video MP4 tracks with FFmpeg and then packages
 // them into HLS CMAF output with Shaka Packager.
-func Transcode(ctx context.Context, input string, outDir string, opts TranscodeOptions) (*TranscodeResult, error) {
+func Transcode(ctx context.Context, input string, outDir string, opts *TranscodeOptions) (*TranscodeResult, error) {
+	if opts == nil {
+		opts = &TranscodeOptions{}
+	}
+
 	if len(opts.Variants) == 0 {
 		opts.Variants = DefaultVariants()
 	}
@@ -63,7 +67,7 @@ func Transcode(ctx context.Context, input string, outDir string, opts TranscodeO
 	encodedAudioPath := ""
 	if hasAudio {
 		encodedAudioPath = filepath.Join(encodedDir, opts.AudioTrack.ID+".mp4")
-		if err := encodeAudioTrack(ctx, input, encodedAudioPath, opts.AudioTrack); err != nil {
+		if err := encodeAudioTrack(ctx, input, encodedAudioPath, &opts.AudioTrack); err != nil {
 			return nil, err
 		}
 	}
@@ -102,8 +106,8 @@ func Transcode(ctx context.Context, input string, outDir string, opts TranscodeO
 			Codec:        opts.AudioTrack.Codec,
 			Channels:     opts.AudioTrack.Channels,
 			Bitrate:      parseBitrate(opts.AudioTrack.Bitrate),
-			PlaylistPath: audioPlaylistPath(opts.AudioTrack),
-			InitPath:     audioInitPath(opts.AudioTrack),
+			PlaylistPath: audioPlaylistPath(&opts.AudioTrack),
+			InitPath:     audioInitPath(&opts.AudioTrack),
 			Segments:     segments,
 		})
 	}
@@ -230,7 +234,7 @@ func encodeVideoTrack(ctx context.Context, input, output string, variant Transco
 	return nil
 }
 
-func encodeAudioTrack(ctx context.Context, input, output string, track AudioTrack) error {
+func encodeAudioTrack(ctx context.Context, input, output string, track *AudioTrack) error {
 	if err := ensureDir(filepath.Dir(output)); err != nil {
 		return fmt.Errorf("create audio dir %s: %w", filepath.Dir(output), err)
 	}
@@ -253,14 +257,14 @@ func encodeAudioTrack(ctx context.Context, input, output string, track AudioTrac
 	return nil
 }
 
-func packageHLS(ctx context.Context, outDir, audioPath string, encodedVideos map[string]string, opts TranscodeOptions) error {
+func packageHLS(ctx context.Context, outDir, audioPath string, encodedVideos map[string]string, opts *TranscodeOptions) error {
 	if err := ensureDir(outDir); err != nil {
 		return fmt.Errorf("create output dir %s: %w", outDir, err)
 	}
 
 	args := make([]string, 0, len(opts.Variants)+8)
 	if audioPath != "" {
-		args = append(args, buildAudioDescriptor(filepath.Clean(audioPath), outDir, opts.AudioTrack))
+		args = append(args, buildAudioDescriptor(filepath.Clean(audioPath), outDir, &opts.AudioTrack))
 	}
 	for _, v := range opts.Variants {
 		videoPath, ok := encodedVideos[v.Label]
@@ -304,7 +308,7 @@ func packageHLS(ctx context.Context, outDir, audioPath string, encodedVideos map
 	return nil
 }
 
-func buildAudioDescriptor(input, outDir string, track AudioTrack) string {
+func buildAudioDescriptor(input, outDir string, track *AudioTrack) string {
 	fields := []string{
 		"in=" + input,
 		"stream=audio",

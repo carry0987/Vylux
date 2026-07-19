@@ -37,7 +37,7 @@ func TestBuildRetryRequests_FailedVideoFullBuildsStageRetries(t *testing.T) {
 	}
 	optionsJSON := json.RawMessage(`{"cover":{"timestamp_sec":2},"preview":{"start_sec":3,"duration":4,"width":480,"fps":12,"format":"gif"},"transcode":{"encrypt":true}}`)
 
-	retryReqs, strategy, err := h.buildRetryRequests(dbq.Job{
+	retryReqs, strategy, err := h.buildRetryRequests(&dbq.Job{
 		Type:        queue.TypeVideoFull,
 		Hash:        "hash123",
 		Source:      "uploads/video.mp4",
@@ -84,7 +84,7 @@ func TestBuildRetryRequests_FailedVideoFullBuildsStageRetries(t *testing.T) {
 func TestBuildRetryRequests_SingleStageRetryReusesStoredRequest(t *testing.T) {
 	h := &JobHandler{}
 
-	retryReqs, strategy, err := h.buildRetryRequests(dbq.Job{
+	retryReqs, strategy, err := h.buildRetryRequests(&dbq.Job{
 		Type:        queue.TypeVideoPreview,
 		Hash:        "hash123",
 		Source:      "uploads/video.mp4",

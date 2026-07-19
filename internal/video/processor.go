@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // CoverResult holds the output of a cover extraction.
@@ -117,20 +120,6 @@ func DefaultAudioTrack() AudioTrack {
 		Channels: 2,
 		Bitrate:  "128k",
 	}
-}
-
-// codecsString returns the CODECS value for the HLS master playlist
-// (RFC 6381) so players can select the correct variant without downloading segments.
-func codecsString(v TranscodeVariant) string {
-	var vc string
-	switch v.Codec {
-	case CodecAV1:
-		vc = "av01.0.08M.08" // Main profile, Level 4.0, Main tier, 8-bit
-	default:
-		vc = "avc1.640028" // High profile, Level 4.0
-	}
-
-	return vc + ",mp4a.40.2" // + AAC-LC audio
 }
 
 // TranscodeResult describes a single variant output after transcoding.
@@ -383,18 +372,6 @@ func evenAtMost(value int) int {
 	return value
 }
 
-func evenFloor(value float64) int {
-	n := int(math.Floor(value))
-	if n <= 2 {
-		return 2
-	}
-	if n%2 != 0 {
-		n--
-	}
-
-	return n
-}
-
 func evenNearestAtMost(value float64, limit int) int {
 	limit = evenAtMost(limit)
 	if limit <= 2 {
@@ -433,15 +410,15 @@ func parseBitrate(value string) int {
 	return n * multiplier
 }
 
-func audioInitPath(track AudioTrack) string {
+func audioInitPath(track *AudioTrack) string {
 	return filepathJoin("audio", track.ID, "init.mp4")
 }
 
-func audioPlaylistPath(track AudioTrack) string {
+func audioPlaylistPath(track *AudioTrack) string {
 	return filepathJoin("audio", track.ID, "playlist.m3u8")
 }
 
-func audioSegmentPattern(track AudioTrack) string {
+func audioSegmentPattern(track *AudioTrack) string {
 	return filepathJoin("audio", track.ID, "seg_$Number$.m4s")
 }
 
@@ -465,9 +442,9 @@ func formatBandwidth(v TranscodeVariant) string {
 	return strconv.Itoa(estimateBandwidth(v))
 }
 
-func audioName(track AudioTrack) string {
+func audioName(track *AudioTrack) string {
 	if track.Role != "" {
-		return strings.Title(track.Role)
+		return cases.Title(language.Und).String(track.Role)
 	}
 	return "Audio"
 }

@@ -55,7 +55,7 @@ func (q *Queries) DeleteJobsByHash(ctx context.Context, hash string) error {
 
 const getActiveJobByFingerprint = `-- name: GetActiveJobByFingerprint :one
 SELECT id, type, hash, source, options, request_fingerprint, status, progress, callback_url, callback_status, retry_of_job_id, error, results, created_at, updated_at FROM jobs
-WHERE request_fingerprint = $1 AND status NOT IN ('failed', 'cancelled')
+WHERE request_fingerprint = $1 AND status NOT IN ('failed', 'canceled')
 ORDER BY created_at DESC
 LIMIT 1
 `

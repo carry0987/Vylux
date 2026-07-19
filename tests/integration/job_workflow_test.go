@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"Vylux/internal/config"
 	"Vylux/internal/handler"
 	"Vylux/internal/storage"
-	"net/http/httptest"
 )
 
 // newTestServerWithStore spins up a RustFS-backed test server and returns the raw store for seeding fixtures.

@@ -95,7 +95,7 @@ func TestPackageHLSBuildsSplitTrackEncryptedArgs(t *testing.T) {
 
 	if err := packageHLS(context.Background(), t.TempDir(), "/tmp/audio.mp4", map[string]string{
 		variant.Label: "/tmp/r720_h264.mp4",
-	}, TranscodeOptions{
+	}, &TranscodeOptions{
 		Variants:   []TranscodeVariant{variant},
 		AudioTrack: DefaultAudioTrack(),
 		SegmentSec: 4,
@@ -152,7 +152,7 @@ func TestPackageHLSIncludesExplicitLanguage(t *testing.T) {
 
 	if err := packageHLS(context.Background(), t.TempDir(), "/tmp/audio.mp4", map[string]string{
 		variant.Label: "/tmp/r1080_h264.mp4",
-	}, TranscodeOptions{
+	}, &TranscodeOptions{
 		Variants:   []TranscodeVariant{variant},
 		AudioTrack: track,
 		SegmentSec: 6,
@@ -173,7 +173,7 @@ func TestPackageHLSIncludesExplicitLanguage(t *testing.T) {
 func TestPackageHLSRejectsIncompleteEncryptionConfig(t *testing.T) {
 	err := packageHLS(context.Background(), t.TempDir(), "", map[string]string{
 		"r720_h264": "/tmp/r720_h264.mp4",
-	}, TranscodeOptions{
+	}, &TranscodeOptions{
 		Variants: []TranscodeVariant{{
 			Label:  "r720_h264",
 			Codec:  CodecH264,

@@ -74,8 +74,9 @@ func (c *Cleaner) cancelTasks(ctx context.Context, hash string) {
 	}
 
 	queues := c.queueNames(ctx)
-	for _, job := range jobs {
-		if job.Status == "completed" || job.Status == "cancelled" {
+	for i := range jobs {
+		job := &jobs[i]
+		if job.Status == "completed" || job.Status == "canceled" {
 			continue
 		}
 		c.cancelTask(ctx, job.ID, queues)

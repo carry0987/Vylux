@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     options       JSONB       NOT NULL DEFAULT '{}'::jsonb,
     request_fingerprint TEXT  NOT NULL,     -- idempotency key derived from request payload
     status        TEXT        NOT NULL DEFAULT 'queued',
-                                           -- queued | processing | completed | failed | cancelled
+                                           -- queued | processing | completed | failed | canceled
     progress      INT         NOT NULL DEFAULT 0,  -- 0-100 percentage (video transcode)
     callback_url  TEXT        NOT NULL DEFAULT '',
     callback_status TEXT      NOT NULL DEFAULT 'pending',

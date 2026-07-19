@@ -112,7 +112,7 @@ type VideoFullPayload struct {
 // ---- Task constructors ----
 
 // NewImageThumbnailTask creates an image:thumbnail task.
-func NewImageThumbnailTask(p ImageThumbnailPayload) (*asynq.Task, error) {
+func NewImageThumbnailTask(p *ImageThumbnailPayload) (*asynq.Task, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, fmt.Errorf("marshal image:thumbnail payload: %w", err)
@@ -122,7 +122,7 @@ func NewImageThumbnailTask(p ImageThumbnailPayload) (*asynq.Task, error) {
 }
 
 // NewVideoCoverTask creates a video:cover task.
-func NewVideoCoverTask(p VideoCoverPayload) (*asynq.Task, error) {
+func NewVideoCoverTask(p *VideoCoverPayload) (*asynq.Task, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, fmt.Errorf("marshal video:cover payload: %w", err)
@@ -132,7 +132,7 @@ func NewVideoCoverTask(p VideoCoverPayload) (*asynq.Task, error) {
 }
 
 // NewVideoPreviewTask creates a video:preview task.
-func NewVideoPreviewTask(p VideoPreviewPayload) (*asynq.Task, error) {
+func NewVideoPreviewTask(p *VideoPreviewPayload) (*asynq.Task, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, fmt.Errorf("marshal video:preview payload: %w", err)
@@ -142,7 +142,7 @@ func NewVideoPreviewTask(p VideoPreviewPayload) (*asynq.Task, error) {
 }
 
 // NewVideoTranscodeTask creates a video:transcode task.
-func NewVideoTranscodeTask(p VideoTranscodePayload) (*asynq.Task, error) {
+func NewVideoTranscodeTask(p *VideoTranscodePayload) (*asynq.Task, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, fmt.Errorf("marshal video:transcode payload: %w", err)
@@ -152,7 +152,7 @@ func NewVideoTranscodeTask(p VideoTranscodePayload) (*asynq.Task, error) {
 }
 
 // NewVideoFullTask creates a video:full task.
-func NewVideoFullTask(p VideoFullPayload) (*asynq.Task, error) {
+func NewVideoFullTask(p *VideoFullPayload) (*asynq.Task, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return nil, fmt.Errorf("marshal video:full payload: %w", err)

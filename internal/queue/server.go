@@ -83,7 +83,7 @@ func (s *Server) HandleFunc(taskType string, handler func(context.Context, *asyn
 	s.Handle(taskType, asynq.HandlerFunc(handler))
 }
 
-// Run starts the worker server and blocks until ctx is cancelled.
+// Run starts the worker server and blocks until ctx is canceled.
 // After ctx cancellation it performs a graceful shutdown.
 func (s *Server) Run(ctx context.Context) error {
 	// Start the asynq server in a goroutine.
@@ -120,7 +120,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 // Inspector returns an asynq.Inspector for the same Redis instance,
-// useful for querying task status or cancelling tasks.
+// useful for querying task status or canceling tasks.
 func NewInspector(redisURL string) (*asynq.Inspector, error) {
 	opt, err := asynq.ParseRedisURI(redisURL)
 	if err != nil {

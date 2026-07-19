@@ -68,16 +68,9 @@ func (h *StreamHandler) Handle(c *echo.Context) error {
 	}
 	defer rc.Close()
 
-	// Set cache headers — immutable for segments and init, shorter for m3u8.
+	// Generated VOD assets are immutable, so cache all HLS objects aggressively.
 	resp := c.Response()
-	if strings.HasSuffix(filePath, ".m3u8") {
-		// Playlists may be updated (e.g. live), but for VOD they are immutable.
-		// Use a long cache but allow revalidation.
-		resp.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	} else {
-		// Segments and init are truly immutable (content-addressed by hash).
-		resp.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-	}
+	resp.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
 	resp.Header().Set("Content-Type", ct)
 	resp.Header().Set("Access-Control-Allow-Origin", "*")

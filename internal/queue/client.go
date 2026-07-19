@@ -58,7 +58,7 @@ func videoQueueOptions(fileSize int64, largeThreshold int64) (string, int) {
 }
 
 // EnqueueImageThumbnail enqueues an image:thumbnail task on the critical queue.
-func (c *Client) EnqueueImageThumbnail(ctx context.Context, p ImageThumbnailPayload) (*asynq.TaskInfo, error) {
+func (c *Client) EnqueueImageThumbnail(ctx context.Context, p *ImageThumbnailPayload) (*asynq.TaskInfo, error) {
 	task, err := NewImageThumbnailTask(p)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (c *Client) EnqueueImageThumbnail(ctx context.Context, p ImageThumbnailPayl
 }
 
 // EnqueueVideoCover enqueues a video:cover task on the default queue.
-func (c *Client) EnqueueVideoCover(ctx context.Context, p VideoCoverPayload) (*asynq.TaskInfo, error) {
+func (c *Client) EnqueueVideoCover(ctx context.Context, p *VideoCoverPayload) (*asynq.TaskInfo, error) {
 	task, err := NewVideoCoverTask(p)
 	if err != nil {
 		return nil, err
@@ -84,7 +84,7 @@ func (c *Client) EnqueueVideoCover(ctx context.Context, p VideoCoverPayload) (*a
 }
 
 // EnqueueVideoPreview enqueues a video:preview task on the default queue.
-func (c *Client) EnqueueVideoPreview(ctx context.Context, p VideoPreviewPayload) (*asynq.TaskInfo, error) {
+func (c *Client) EnqueueVideoPreview(ctx context.Context, p *VideoPreviewPayload) (*asynq.TaskInfo, error) {
 	task, err := NewVideoPreviewTask(p)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (c *Client) EnqueueVideoPreview(ctx context.Context, p VideoPreviewPayload)
 
 // EnqueueVideoTranscode enqueues a video:transcode task.
 // Files >= largeThreshold are routed to the video:large queue with fewer retries.
-func (c *Client) EnqueueVideoTranscode(ctx context.Context, p VideoTranscodePayload, fileSize int64, largeThreshold int64) (*asynq.TaskInfo, error) {
+func (c *Client) EnqueueVideoTranscode(ctx context.Context, p *VideoTranscodePayload, fileSize int64, largeThreshold int64) (*asynq.TaskInfo, error) {
 	task, err := NewVideoTranscodeTask(p)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (c *Client) EnqueueVideoTranscode(ctx context.Context, p VideoTranscodePayl
 
 // EnqueueVideoFull enqueues a video:full task.
 // Files >= largeThreshold are routed to the video:large queue with fewer retries.
-func (c *Client) EnqueueVideoFull(ctx context.Context, p VideoFullPayload, fileSize int64, largeThreshold int64) (*asynq.TaskInfo, error) {
+func (c *Client) EnqueueVideoFull(ctx context.Context, p *VideoFullPayload, fileSize int64, largeThreshold int64) (*asynq.TaskInfo, error) {
 	task, err := NewVideoFullTask(p)
 	if err != nil {
 		return nil, err

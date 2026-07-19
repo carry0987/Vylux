@@ -280,7 +280,7 @@ func (d *Deps) completeJob(ctx context.Context, jobID string, meta jobMeta, resu
 
 	// Deliver webhook callback in the background.
 	if d.Webhook != nil && meta.CallbackURL != "" {
-		go d.Webhook.Deliver(ctx, jobID, meta.CallbackURL, webhook.CallbackPayload{
+		go d.Webhook.Deliver(ctx, jobID, meta.CallbackURL, &webhook.CallbackPayload{
 			JobID:   jobID,
 			Type:    meta.Type,
 			Hash:    meta.Hash,
@@ -318,7 +318,7 @@ func (d *Deps) failJobWithResult(ctx context.Context, jobID string, meta jobMeta
 
 	// Deliver failure webhook callback in the background.
 	if d.Webhook != nil && meta.CallbackURL != "" {
-		go d.Webhook.Deliver(ctx, jobID, meta.CallbackURL, webhook.CallbackPayload{
+		go d.Webhook.Deliver(ctx, jobID, meta.CallbackURL, &webhook.CallbackPayload{
 			JobID:   jobID,
 			Type:    meta.Type,
 			Hash:    meta.Hash,

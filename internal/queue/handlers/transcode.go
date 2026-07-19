@@ -128,7 +128,7 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 			attribute.Int("video.audio_track_count", 1),
 			attribute.Bool("video.encrypt", p.Encrypt),
 		)
-		results, err := video.Transcode(transcodeCtx, tmpPath, outDir, opts)
+		results, err := video.Transcode(transcodeCtx, tmpPath, outDir, &opts)
 		if err != nil {
 			recordSpanError(span, err)
 			span.End()
@@ -165,7 +165,8 @@ func buildTranscodeResult(hash string, result *video.TranscodeResult, uploadedKe
 		UploadedKeys: uploadedKeys,
 	}
 
-	for _, track := range result.AudioTracks {
+	for i := range result.AudioTracks {
+		track := &result.AudioTracks[i]
 		out.AudioTracks = append(out.AudioTracks, audioTrackResult{
 			ID:       track.ID,
 			Role:     track.Role,
@@ -182,7 +183,8 @@ func buildTranscodeResult(hash string, result *video.TranscodeResult, uploadedKe
 		out.Streaming.DefaultAudioTrackID = out.AudioTracks[0].ID
 	}
 
-	for _, track := range result.VideoTracks {
+	for i := range result.VideoTracks {
+		track := &result.VideoTracks[i]
 		videoTrack := videoTrackResult{
 			ID:       track.ID,
 			Codec:    string(track.Codec),

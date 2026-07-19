@@ -149,7 +149,7 @@ func (h *JobHandler) Create(c *echo.Context) error {
 	// ── Idempotency check ──
 	existing, err := h.queries.GetActiveJobByFingerprint(ctx, fingerprint)
 	if err == nil {
-		// A non-failed/cancelled job already exists.
+		// A non-failed/canceled job already exists.
 		resp := JobResponse{
 			Hash:   existing.Hash,
 			Status: existing.Status,
@@ -238,7 +238,7 @@ func (h *JobHandler) Retry(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusConflict, "only failed jobs can be retried")
 	}
 
-	retryReqs, strategy, err := h.buildRetryRequests(job)
+	retryReqs, strategy, err := h.buildRetryRequests(&job)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusConflict, err.Error())
 	}
@@ -573,7 +573,7 @@ func (h *JobHandler) createOrReuseJob(ctx context.Context, req JobRequest, finge
 	return &RetryJobInfo{JobID: taskInfo.ID, Type: req.Type, Status: "queued", RetryOfJobID: retryOfJobID}, nil
 }
 
-func (h *JobHandler) buildRetryRequests(job dbq.Job) ([]JobRequest, string, error) {
+func (h *JobHandler) buildRetryRequests(job *dbq.Job) ([]JobRequest, string, error) {
 	baseOptions, err := parseOptions(job.Options)
 	if err != nil {
 		return nil, "", fmt.Errorf("stored job options are invalid")
@@ -601,7 +601,7 @@ func (h *JobHandler) buildRetryRequests(job dbq.Job) ([]JobRequest, string, erro
 
 		requests := make([]JobRequest, 0, len(result.RetryPlan.JobTypes))
 		for _, jobType := range result.RetryPlan.JobTypes {
-			req, err := retryRequestForVideoFull(jobType, job, fullOptions)
+			req, err := retryRequestForVideoFull(jobType, job, &fullOptions)
 			if err != nil {
 				return nil, "", err
 			}
@@ -613,7 +613,7 @@ func (h *JobHandler) buildRetryRequests(job dbq.Job) ([]JobRequest, string, erro
 	}
 }
 
-func jobRequestFromStored(jobType string, job dbq.Job, opts map[string]any) JobRequest {
+func jobRequestFromStored(jobType string, job *dbq.Job, opts map[string]any) JobRequest {
 	return JobRequest{
 		Type:        jobType,
 		Hash:        job.Hash,
@@ -623,7 +623,7 @@ func jobRequestFromStored(jobType string, job dbq.Job, opts map[string]any) JobR
 	}
 }
 
-func retryRequestForVideoFull(jobType string, job dbq.Job, opts queue.VideoFullOptions) (JobRequest, error) {
+func retryRequestForVideoFull(jobType string, job *dbq.Job, opts *queue.VideoFullOptions) (JobRequest, error) {
 	filtered := map[string]any{}
 	switch jobType {
 	case queue.TypeVideoCover:
@@ -725,7 +725,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Outputs:      parseThumbnailOutputs(req.Options),
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueImageThumbnail(ctx, payload)
+		info, err := h.queueClient.EnqueueImageThumbnail(ctx, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -743,7 +743,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			TimestampSec: options.TimestampSec,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoCover(ctx, payload)
+		info, err := h.queueClient.EnqueueVideoCover(ctx, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -765,7 +765,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Format:       options.Format,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoPreview(ctx, payload)
+		info, err := h.queueClient.EnqueueVideoPreview(ctx, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -783,7 +783,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Encrypt:      options.Encrypt,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoTranscode(ctx, payload, sourceSize, h.largeThreshold)
+		info, err := h.queueClient.EnqueueVideoTranscode(ctx, &payload, sourceSize, h.largeThreshold)
 		if err != nil {
 			return nil, err
 		}
@@ -802,7 +802,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Options:      options,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoFull(ctx, payload, sourceSize, h.largeThreshold)
+		info, err := h.queueClient.EnqueueVideoFull(ctx, &payload, sourceSize, h.largeThreshold)
 		if err != nil {
 			return nil, err
 		}
