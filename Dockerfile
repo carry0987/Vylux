@@ -21,7 +21,7 @@ RUN CGO_ENABLED=1 go build \
 FROM alpine:edge
 
 ARG TARGETARCH
-ARG SHAKA_PACKAGER_VERSION=v3.7.0
+ARG SHAKA_PACKAGER_VERSION=v3.9.2
 
 RUN apk add --no-cache \
     vips \
