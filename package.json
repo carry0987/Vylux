@@ -13,26 +13,26 @@
     "lint": "biome check --write ."
   },
   "dependencies": {
-    "@docusaurus/core": "^3.10.1",
-    "@docusaurus/preset-classic": "^3.10.1",
-    "@docusaurus/theme-mermaid": "^3.10.1",
+    "@docusaurus/core": "^3.10.2",
+    "@docusaurus/preset-classic": "^3.10.2",
+    "@docusaurus/theme-mermaid": "^3.10.2",
     "@mdx-js/react": "^3.1.1",
     "clsx": "^2.1.1",
     "prism-react-renderer": "^2.4.1",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.15",
-    "@docusaurus/module-type-aliases": "^3.10.1",
-    "@docusaurus/theme-classic": "^3.10.1",
-    "@docusaurus/theme-live-codeblock": "^3.10.1",
-    "@docusaurus/tsconfig": "^3.10.1",
-    "@docusaurus/types": "^3.10.1",
-    "@types/node": "^25.9.1",
-    "@types/react": "^19.2.15",
+    "@biomejs/biome": "^2.5.4",
+    "@docusaurus/module-type-aliases": "^3.10.2",
+    "@docusaurus/theme-classic": "^3.10.2",
+    "@docusaurus/theme-live-codeblock": "^3.10.2",
+    "@docusaurus/tsconfig": "^3.10.2",
+    "@docusaurus/types": "^3.10.2",
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "browserslist": {
     "production": [
