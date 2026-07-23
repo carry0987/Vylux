@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/carry0987/Vylux/compare/v1.2.0...v1.2.1) (2026-07-23)
+
+
+### Bug Fixes
+
+* **queue:** always include options in video full task payload ([bf85e8a](https://github.com/carry0987/Vylux/commit/bf85e8acd18134b5a5fb3b55cd639e1fc28e0130))
+
 ## [1.2.0](https://github.com/carry0987/Vylux/compare/v1.1.0...v1.2.0) (2026-07-19)
 
 
