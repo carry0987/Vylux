@@ -1,0 +1,73 @@
+name: Setup libvips
+description: Install, cache, build, and expose libvips for CI jobs.
+
+inputs:
+  libvips-version:
+    description: libvips version to install
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install native build dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          curl \
+          libexpat1-dev \
+          libffi-dev \
+          libgif-dev \
+          libglib2.0-dev \
+          libheif-dev \
+          libimagequant-dev \
+          libjpeg-turbo8-dev \
+          liborc-0.4-dev \
+          libpng-dev \
+          libtiff-dev \
+          libwebp-dev \
+          meson \
+          ninja-build \
+          pkg-config
+
+    - name: Restore libvips cache
+      id: libvips-cache
+      uses: actions/cache@v6
+      with:
+        path: .cache/libvips/${{ inputs.libvips-version }}
+        key: ${{ runner.os }}-${{ runner.arch }}-libvips-${{ inputs.libvips-version }}
+
+    - name: Build libvips
+      if: steps.libvips-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        PREFIX="$GITHUB_WORKSPACE/.cache/libvips/${{ inputs.libvips-version }}"
+        mkdir -p "$PREFIX"
+        curl -fsSL \
+          -o /tmp/vips.tar.xz \
+          "https://github.com/libvips/libvips/releases/download/v${{ inputs.libvips-version }}/vips-${{ inputs.libvips-version }}.tar.xz"
+        tar -xf /tmp/vips.tar.xz -C /tmp
+        meson setup \
+          /tmp/vips-${{ inputs.libvips-version }}/build \
+          /tmp/vips-${{ inputs.libvips-version }} \
+          --prefix="$PREFIX" \
+          --libdir=lib \
+          --buildtype=release
+        meson compile -C /tmp/vips-${{ inputs.libvips-version }}/build
+        meson install -C /tmp/vips-${{ inputs.libvips-version }}/build
+
+    - name: Configure libvips environment
+      shell: bash
+      run: |
+        PREFIX="$GITHUB_WORKSPACE/.cache/libvips/${{ inputs.libvips-version }}"
+        echo "PATH=$PREFIX/bin:$PATH" >> "$GITHUB_ENV"
+        echo "PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig:${PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+        echo "LD_LIBRARY_PATH=$PREFIX/lib:${LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
+    - name: Show libvips version
+      shell: bash
+      run: |
+        vips --version
+        pkg-config --modversion vips
+        pkg-config --variable=libdir vips
