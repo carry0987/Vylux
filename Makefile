@@ -7,9 +7,16 @@ fmt:
 
 tidy:
 	$(GO) mod tidy
+	$(GO) mod verify
+
+verify:
+	$(GO) mod verify
 
 upgrade:
 	$(GO) get -u ./...
+
+fix:
+	$(GO) fix ./...
 
 lint:
 	golangci-lint run ./...
