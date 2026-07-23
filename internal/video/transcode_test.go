@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -277,10 +278,8 @@ func assertArgContains(t *testing.T, args []string, want string) {
 
 func assertArgEquals(t *testing.T, args []string, want string) {
 	t.Helper()
-	for _, arg := range args {
-		if arg == want {
-			return
-		}
+	if slices.Contains(args, want) {
+		return
 	}
 	t.Fatalf("args do not contain exact value %q: %v", want, args)
 }

@@ -113,7 +113,7 @@ func ParseOptions(raw string) (Options, error) {
 		return opts, nil
 	}
 
-	for _, part := range strings.Split(raw, "_") {
+	for part := range strings.SplitSeq(raw, "_") {
 		if len(part) < 2 {
 			return opts, fmt.Errorf("invalid option token: %q", part)
 		}

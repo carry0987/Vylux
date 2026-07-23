@@ -272,7 +272,7 @@ func s3CacheKey(format image.Format, cacheKey string) string {
 var contentHashPattern = regexp.MustCompile(`(?i)^(?:sha256:)?([a-f0-9]{64})$`)
 
 func extractContentHash(source string) string {
-	for _, segment := range strings.Split(source, "/") {
+	for segment := range strings.SplitSeq(source, "/") {
 		match := contentHashPattern.FindStringSubmatch(segment)
 		if len(match) == 2 {
 			return strings.ToLower(match[1])

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -672,9 +673,7 @@ func cloneOptions(opts map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	cloned := make(map[string]any, len(opts))
-	for k, v := range opts {
-		cloned[k] = v
-	}
+	maps.Copy(cloned, opts)
 	return cloned
 }
 

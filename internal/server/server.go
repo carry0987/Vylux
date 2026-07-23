@@ -182,8 +182,8 @@ func (s *Server) registerRoutes() {
 	s.echo.GET("/api/key/:hash", keyHandler.Handle,
 		custommw.RedisRateLimit(s.deps.Redis, "key", 120, time.Minute, func(c *echo.Context) string {
 			auth := c.Request().Header.Get("Authorization")
-			if strings.HasPrefix(auth, "Bearer ") {
-				return "token:" + custommw.HashRateLimitKey(strings.TrimPrefix(auth, "Bearer "))
+			if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
+				return "token:" + custommw.HashRateLimitKey(after)
 			}
 			return "ip:" + custommw.HashRateLimitKey(c.RealIP())
 		}),

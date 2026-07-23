@@ -278,10 +278,7 @@ func resolveTranscodeVariants(templates []TranscodeVariant, sourceWidth, sourceH
 		return templates
 	}
 
-	shortEdge := sourceHeight
-	if sourceWidth < shortEdge {
-		shortEdge = sourceWidth
-	}
+	shortEdge := min(sourceWidth, sourceHeight)
 
 	groups := make(map[VideoCodec][]TranscodeVariant)
 	codecOrder := make([]VideoCodec, 0, len(templates))
@@ -303,10 +300,7 @@ func resolveTranscodeVariants(templates []TranscodeVariant, sourceWidth, sourceH
 func selectVariantsForCodec(templates []TranscodeVariant, sourceWidth, sourceHeight, shortEdge int) []TranscodeVariant {
 	selected := make([]TranscodeVariant, 0, len(templates))
 	for _, template := range templates {
-		targetShortEdge := template.Height
-		if template.Width < targetShortEdge {
-			targetShortEdge = template.Width
-		}
+		targetShortEdge := min(template.Width, template.Height)
 		if targetShortEdge > shortEdge {
 			continue
 		}
@@ -330,14 +324,8 @@ func fitVariantDimensions(sourceWidth, sourceHeight, maxWidth, maxHeight int) (i
 		return maxWidth, maxHeight
 	}
 
-	limitWidth := sourceWidth
-	if maxWidth < limitWidth {
-		limitWidth = maxWidth
-	}
-	limitHeight := sourceHeight
-	if maxHeight < limitHeight {
-		limitHeight = maxHeight
-	}
+	limitWidth := min(maxWidth, sourceWidth)
+	limitHeight := min(maxHeight, sourceHeight)
 
 	sourceAspect := float64(sourceWidth) / float64(sourceHeight)
 	maxAspect := float64(maxWidth) / float64(maxHeight)

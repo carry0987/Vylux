@@ -67,7 +67,7 @@ func CanonicalizeImageOptions(raw string) (string, error) {
 
 	var width, height, quality optionValue
 
-	for _, part := range strings.Split(raw, "_") {
+	for part := range strings.SplitSeq(raw, "_") {
 		if len(part) < 2 {
 			return "", fmt.Errorf("invalid option token: %q", part)
 		}

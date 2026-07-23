@@ -110,7 +110,7 @@ func (c *Cleaner) cancelTask(ctx context.Context, taskID string, queues []string
 		return
 	}
 
-	for attempt := 0; attempt < cancelAttempts; attempt++ {
+	for attempt := range cancelAttempts {
 		if err := c.inspector.CancelProcessing(taskID); err != nil {
 			slog.Debug("cleanup: cancel processing failed", apptracing.LogFields(ctx, "task_id", taskID, "attempt", attempt+1, "error", err)...)
 		}
