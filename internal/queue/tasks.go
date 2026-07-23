@@ -105,7 +105,7 @@ type VideoFullPayload struct {
 	apptracing.TraceCarrier
 	Hash        string           `json:"hash"`
 	Source      string           `json:"source"`
-	Options     VideoFullOptions `json:"options,omitempty"`
+	Options     VideoFullOptions `json:"options"`
 	CallbackURL string           `json:"callback_url"`
 }
 
