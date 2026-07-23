@@ -25,7 +25,7 @@ test:
 	$(GO) test ./...
 
 run:
-	$(GO) run ./cmd/server
+	$(GO) run ./cmd/vylux
 
 build:
-	$(GO) build ./cmd/server
+	$(GO) build ./cmd/vylux
