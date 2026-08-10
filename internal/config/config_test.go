@@ -104,6 +104,37 @@ func TestValidate_URLSettings(t *testing.T) {
 	}
 }
 
+func TestValidate_DeploymentTarget(t *testing.T) {
+	tests := []struct {
+		name        string
+		mutate      func(*Config)
+		wantErrPart string
+	}{
+		{name: "valid target", mutate: func(*Config) {}},
+		{name: "invalid deployment id", mutate: func(cfg *Config) { cfg.DeploymentID = "deployment-a" }, wantErrPart: "DEPLOYMENT_ID must be a non-zero UUID"},
+		{name: "missing source provider", mutate: func(cfg *Config) { cfg.SourceProviderKind = "" }, wantErrPart: "provider kind must be s3 or r2"},
+		{name: "invalid media provider", mutate: func(cfg *Config) { cfg.MediaProviderKind = "swift" }, wantErrPart: "provider kind must be s3 or r2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			tt.mutate(cfg)
+
+			errs := cfg.Validate()
+			if tt.wantErrPart == "" {
+				if len(errs) != 0 {
+					t.Fatalf("expected valid deployment target, got %v", errs)
+				}
+				return
+			}
+			if !strings.Contains(strings.Join(errs, "\n"), tt.wantErrPart) {
+				t.Fatalf("expected error containing %q, got %v", tt.wantErrPart, errs)
+			}
+		})
+	}
+}
+
 func TestNormalize_URLSettings(t *testing.T) {
 	cfg := validConfig()
 	cfg.BaseURL = "https://media.example.com/"
@@ -133,6 +164,9 @@ func TestNormalize_URLSettings(t *testing.T) {
 
 func validConfig() *Config {
 	return &Config{
+		DeploymentID:           "550e8400-e29b-41d4-a716-446655440000",
+		SourceProviderKind:     "r2",
+		MediaProviderKind:      "r2",
 		Port:                   3000,
 		Mode:                   "all",
 		DatabaseURL:            "postgres://user:pass@localhost:5432/db",

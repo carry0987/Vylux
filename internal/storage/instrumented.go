@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"time"
 
@@ -87,9 +88,51 @@ func (s *instrumentedStorage) List(ctx context.Context, bucket, prefix string) (
 	return keys, err
 }
 
+func (s *instrumentedStorage) ListPage(
+	ctx context.Context,
+	bucket, prefix, continuation string,
+	limit int32,
+) ([]string, string, bool, error) {
+	pager, ok := s.inner.(interface {
+		ListPage(context.Context, string, string, string, int32) ([]string, string, bool, error)
+	})
+	if !ok {
+		return nil, "", false, fmt.Errorf("storage backend does not expose bounded object listing")
+	}
+
+	var keys []string
+	var next string
+	var done bool
+	err := s.observe(ctx, "list_page", bucket, prefix, "", func(ctx context.Context, span trace.Span) error {
+		var innerErr error
+		keys, next, done, innerErr = pager.ListPage(ctx, bucket, prefix, continuation, limit)
+		if innerErr == nil {
+			span.SetAttributes(
+				attribute.Int("storage.objects", len(keys)),
+				attribute.Bool("storage.list_complete", done),
+			)
+		}
+		return innerErr
+	})
+	return keys, next, done, err
+}
+
 func (s *instrumentedStorage) HeadBucket(ctx context.Context, bucket string) error {
 	return s.observe(ctx, "head_bucket", bucket, "", "", func(ctx context.Context, span trace.Span) error {
 		return s.inner.HeadBucket(ctx, bucket)
+	})
+}
+
+func (s *instrumentedStorage) CheckUnversioned(ctx context.Context, bucket string) error {
+	checker, ok := s.inner.(interface {
+		CheckUnversioned(context.Context, string) error
+	})
+	if !ok {
+		return fmt.Errorf("storage backend does not expose bucket versioning state")
+	}
+
+	return s.observe(ctx, "check_unversioned", bucket, "", "", func(ctx context.Context, _ trace.Span) error {
+		return checker.CheckUnversioned(ctx, bucket)
 	})
 }
 

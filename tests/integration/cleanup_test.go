@@ -25,10 +25,11 @@ func TestCleanup_DeleteMedia(t *testing.T) {
 	ts, cfg, cleanup := newTestServer(t)
 	defer cleanup()
 
+	hash := strings.Repeat("f", 64)
 	body := handler.JobRequest{
 		Type:        "image:thumbnail",
-		Hash:        "cleanup-test-hash",
-		Source:      "uploads/test.jpg",
+		Hash:        hash,
+		Source:      "uploads/" + hash + ".jpg",
 		CallbackURL: "http://example.com/callback",
 	}
 	jsonBody, _ := json.Marshal(body)

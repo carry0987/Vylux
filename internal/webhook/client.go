@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/lifecycle"
 	"Vylux/internal/signature"
 	apptracing "Vylux/internal/tracing"
 
@@ -26,6 +28,7 @@ type CallbackPayload struct {
 	JobID   string `json:"job_id"`
 	Type    string `json:"type"`
 	Hash    string `json:"hash"`
+	Source  string `json:"source,omitempty"`
 	Status  string `json:"status"`
 	Error   string `json:"error,omitempty"`
 	Results any    `json:"results,omitempty"`
@@ -33,14 +36,15 @@ type CallbackPayload struct {
 
 // Client delivers webhook callbacks to the caller's endpoint.
 type Client struct {
-	httpClient *http.Client
-	secret     string
-	queries    *dbq.Queries
+	httpClient  *http.Client
+	secret      string
+	queries     *dbq.Queries
+	coordinator lifecycle.HashCoordinator
 }
 
 // NewClient creates a webhook Client.
-func NewClient(secret string, queries *dbq.Queries) *Client {
-	return &Client{
+func NewClient(secret string, queries *dbq.Queries, coordinators ...lifecycle.HashCoordinator) *Client {
+	client := &Client{
 		httpClient: &http.Client{
 			Timeout: requestTimeout,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -50,6 +54,10 @@ func NewClient(secret string, queries *dbq.Queries) *Client {
 		secret:  secret,
 		queries: queries,
 	}
+	if len(coordinators) > 0 {
+		client.coordinator = coordinators[0]
+	}
+	return client
 }
 
 // Deliver sends a webhook callback with exponential backoff retries.
@@ -75,7 +83,11 @@ func (c *Client) Deliver(ctx context.Context, jobID string, callbackURL string, 
 	backoff := 1 * time.Second
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err := c.send(ctx, callbackURL, body, sig)
+		err := c.sendGuarded(ctx, callbackURL, body, sig, payload)
+		if errors.Is(err, lifecycle.ErrTombstoned) {
+			slog.Info("webhook suppressed by durable media tombstone", apptracing.LogFields(ctx, "job_id", jobID, "hash", payload.Hash, "source", payload.Source)...)
+			return
+		}
 		if err == nil {
 			slog.Info("webhook delivered",
 				apptracing.LogFields(ctx,
@@ -117,6 +129,22 @@ func (c *Client) Deliver(ctx context.Context, jobID string, callbackURL string, 
 		)...,
 	)
 	c.markStatus(ctx, jobID, "callback_failed")
+}
+
+func (c *Client) sendGuarded(ctx context.Context, url string, body []byte, sig string, payload *CallbackPayload) error {
+	if c.coordinator == nil {
+		return c.send(ctx, url, body, sig)
+	}
+	if payload.Hash == "" || payload.Source == "" {
+		return fmt.Errorf("webhook lifecycle identity requires hash and source")
+	}
+
+	return c.coordinator.WithHashLock(ctx, payload.Hash, func(queries *dbq.Queries) error {
+		if err := lifecycle.RejectTombstoned(ctx, queries, payload.Hash, payload.Source); err != nil {
+			return err
+		}
+		return c.send(ctx, url, body, sig)
+	})
 }
 
 func (c *Client) send(ctx context.Context, url string, body []byte, sig string) error {

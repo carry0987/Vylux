@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"Vylux/internal/deployment"
+	"Vylux/internal/lifecycle"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/storage"
 
@@ -25,6 +27,8 @@ type ReadyzHandler struct {
 	mediaBucket  string
 	dbPing       func(context.Context) error
 	redisPing    func(context.Context) error
+	readiness    lifecycle.StrictReadiness
+	target       deployment.Target
 }
 
 // NewReadyzHandler creates a readiness probe handler.
@@ -34,6 +38,8 @@ func NewReadyzHandler(
 	sourceBucket, mediaBucket string,
 	dbPing func(context.Context) error,
 	redisPing func(context.Context) error,
+	readiness lifecycle.StrictReadiness,
+	target deployment.Target,
 ) *ReadyzHandler {
 	return &ReadyzHandler{
 		sourceStore:  sourceStore,
@@ -42,11 +48,22 @@ func NewReadyzHandler(
 		mediaBucket:  mediaBucket,
 		dbPing:       dbPing,
 		redisPing:    redisPing,
+		readiness:    readiness,
+		target:       target,
 	}
 }
 
 // Handle serves GET /readyz.
 func (h *ReadyzHandler) Handle(c *echo.Context) error {
+	h.target.SetHeaders(c.Response().Header())
+	if err := h.target.Validate(); err != nil {
+		appmetrics.ObserveReadinessFailure("deployment target")
+		return c.String(
+			http.StatusServiceUnavailable,
+			fmt.Sprintf("not ready: deployment target: %v", err),
+		)
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 2*time.Second)
 	defer cancel()
 
@@ -66,7 +83,16 @@ func (h *ReadyzHandler) Handle(c *echo.Context) error {
 			if h.mediaStore == nil {
 				return fmt.Errorf("media storage is not configured")
 			}
-			return h.mediaStore.HeadBucket(ctx, h.mediaBucket)
+			if err := h.mediaStore.HeadBucket(ctx, h.mediaBucket); err != nil {
+				return err
+			}
+			if err := lifecycle.CheckDeletionSemantics(ctx, h.mediaStore, h.mediaBucket); err != nil {
+				return err
+			}
+			if h.readiness == nil {
+				return fmt.Errorf("strict cleanup readiness gate is unavailable")
+			}
+			return h.readiness.AdvanceStrictCleanupReadiness(ctx)
 		}},
 	}
 

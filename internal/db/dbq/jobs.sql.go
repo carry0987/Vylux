@@ -44,6 +44,15 @@ func (q *Queries) CreateJob(ctx context.Context, arg CreateJobParams) error {
 	return err
 }
 
+const deleteJob = `-- name: DeleteJob :exec
+DELETE FROM jobs WHERE id = $1
+`
+
+func (q *Queries) DeleteJob(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteJob, id)
+	return err
+}
+
 const deleteJobsByHash = `-- name: DeleteJobsByHash :exec
 DELETE FROM jobs WHERE hash = $1
 `

@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 
@@ -132,6 +133,36 @@ func (s *S3Storage) List(ctx context.Context, bucket, prefix string) ([]string, 
 	return keys, nil
 }
 
+// ListPage returns at most limit keys and an opaque continuation token. It is
+// intentionally separate from Storage.List so rollout audits cannot
+// accidentally turn a readiness probe into an unbounded bucket scan.
+func (s *S3Storage) ListPage(
+	ctx context.Context,
+	bucket, prefix, continuation string,
+	limit int32,
+) ([]string, string, bool, error) {
+	input := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(bucket),
+		Prefix:  aws.String(prefix),
+		MaxKeys: aws.Int32(limit),
+	}
+	if continuation != "" {
+		input.ContinuationToken = aws.String(continuation)
+	}
+
+	page, err := s.client.ListObjectsV2(ctx, input)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	keys := make([]string, 0, len(page.Contents))
+	for _, object := range page.Contents {
+		keys = append(keys, aws.ToString(object.Key))
+	}
+	done := !aws.ToBool(page.IsTruncated)
+	return keys, aws.ToString(page.NextContinuationToken), done, nil
+}
+
 // HeadBucket checks connectivity to a bucket (used by readiness probe).
 func (s *S3Storage) HeadBucket(ctx context.Context, bucket string) error {
 	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
@@ -142,4 +173,24 @@ func (s *S3Storage) HeadBucket(ctx context.Context, bucket string) error {
 	}
 
 	return err
+}
+
+// CheckUnversioned fails closed unless a DeleteObject removes the only stored
+// bytes. Enabled and suspended buckets can retain object versions.
+func (s *S3Storage) CheckUnversioned(ctx context.Context, bucket string) error {
+	out, err := s.client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{
+		Bucket: aws.String(bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("get bucket versioning: %w", err)
+	}
+
+	switch out.Status {
+	case "":
+		return nil
+	case types.BucketVersioningStatusEnabled, types.BucketVersioningStatusSuspended:
+		return fmt.Errorf("bucket versioning status %q retains object bytes", out.Status)
+	default:
+		return fmt.Errorf("unrecognized bucket versioning status %q", out.Status)
+	}
 }

@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"Vylux/internal/config"
+	"Vylux/internal/deployment"
 	"Vylux/internal/handler"
 	"Vylux/internal/storage"
 )
@@ -25,14 +28,33 @@ func newTestServer(t *testing.T) (*httptest.Server, *config.Config, func()) {
 	return ts, cfg, cleanup
 }
 
+func assertDeploymentHeaders(t *testing.T, header http.Header, target deployment.Target) {
+	t.Helper()
+	want := map[string]string{
+		deployment.HeaderProtocolVersion:       strconv.Itoa(int(target.ProtocolVersion)),
+		deployment.HeaderDeploymentID:          target.DeploymentID,
+		deployment.HeaderSourceBackendIdentity: target.SourceBackendIdentity,
+		deployment.HeaderMediaBackendIdentity:  target.MediaBackendIdentity,
+	}
+	for name, expected := range want {
+		if got := header.Get(name); got != expected {
+			t.Fatalf("%s = %q, want %q", name, got, expected)
+		}
+	}
+}
+
 // TestHealthEndpoints verifies /healthz and /readyz return 200.
 func TestHealthEndpoints(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, _, cleanup := newTestServer(t)
+	ts, cfg, cleanup := newTestServer(t)
 	defer cleanup()
+	target, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build deployment target: %v", err)
+	}
 
 	for _, endpoint := range []string{"/healthz", "/readyz"} {
 		resp, err := http.Get(ts.URL + endpoint)
@@ -49,7 +71,53 @@ func TestHealthEndpoints(t *testing.T) {
 		if string(body) != "OK" {
 			t.Errorf("GET %s: expected OK, got %q", endpoint, string(body))
 		}
+		if endpoint == "/readyz" {
+			assertDeploymentHeaders(t, resp.Header, target)
+		}
 	}
+}
+
+func TestDeploymentEndpointRequiresAPIKeyAndReturnsBoundTarget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ts, cfg, cleanup := newTestServer(t)
+	defer cleanup()
+	unauthorized, err := http.Get(ts.URL + "/api/deployment")
+	if err != nil {
+		t.Fatalf("GET unauthorized deployment: %v", err)
+	}
+	unauthorized.Body.Close()
+	if unauthorized.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated deployment endpoint 401, got %d", unauthorized.StatusCode)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/deployment", nil)
+	if err != nil {
+		t.Fatalf("create deployment request: %v", err)
+	}
+	req.Header.Set("X-API-Key", cfg.APIKey)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET deployment: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected deployment endpoint 200, got %d", resp.StatusCode)
+	}
+	var got deployment.Target
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode deployment target: %v", err)
+	}
+	want, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build expected target: %v", err)
+	}
+	if got != want {
+		t.Fatalf("deployment endpoint returned %#v headers=%v, want %#v", got, resp.Header, want)
+	}
+	assertDeploymentHeaders(t, resp.Header, want)
 }
 
 // TestJobCreate_Unauthorized verifies that creating a job without API key returns 401.
@@ -82,11 +150,17 @@ func TestJobCreate_Success(t *testing.T) {
 	ts, cfg, cleanup := newTestServer(t)
 	defer cleanup()
 
+	hash := strings.Repeat("a", 64)
+	target, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build deployment target: %v", err)
+	}
 	body := handler.JobRequest{
-		Type:        "image:thumbnail",
-		Hash:        "abc123def456",
-		Source:      "uploads/test.jpg",
-		CallbackURL: "http://example.com/callback",
+		Type:             "image:thumbnail",
+		Hash:             hash,
+		Source:           "uploads/" + hash + "-upload-id.jpg",
+		CallbackURL:      "http://example.com/callback",
+		DeploymentTarget: &target,
 	}
 	jsonBody, _ := json.Marshal(body)
 
@@ -117,6 +191,10 @@ func TestJobCreate_Success(t *testing.T) {
 	if result.Status != "queued" && result.Status != "completed" {
 		t.Errorf("expected status queued or completed, got %q", result.Status)
 	}
+	if result.DeploymentTarget != target {
+		t.Fatalf("job response target = %#v, want %#v", result.DeploymentTarget, target)
+	}
+	assertDeploymentHeaders(t, resp.Header, target)
 }
 
 // TestJobGetStatus verifies GET /api/jobs/:id returns job details.
@@ -128,10 +206,11 @@ func TestJobGetStatus(t *testing.T) {
 	ts, cfg, cleanup := newTestServer(t)
 	defer cleanup()
 
+	hash := strings.Repeat("b", 64)
 	body := handler.JobRequest{
 		Type:        "image:thumbnail",
-		Hash:        "status-test-hash",
-		Source:      "uploads/test.jpg",
+		Hash:        hash,
+		Source:      "uploads/" + hash + ".jpg",
 		CallbackURL: "http://example.com/callback",
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -176,4 +255,12 @@ func TestJobGetStatus(t *testing.T) {
 	if statusResult.Hash != body.Hash {
 		t.Errorf("expected hash %q, got %q", body.Hash, statusResult.Hash)
 	}
+	wantTarget, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build deployment target: %v", err)
+	}
+	if statusResult.DeploymentTarget != wantTarget {
+		t.Fatalf("status response target = %#v, want %#v", statusResult.DeploymentTarget, wantTarget)
+	}
+	assertDeploymentHeaders(t, statusResp.Header, wantTarget)
 }

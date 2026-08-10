@@ -15,7 +15,9 @@ import (
 	"Vylux/internal/config"
 	"Vylux/internal/db"
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/deployment"
 	"Vylux/internal/encryption"
+	"Vylux/internal/lifecycle"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/queue"
 	"Vylux/internal/queue/handlers"
@@ -129,7 +131,7 @@ func run(cfg *config.Config) error {
 		AccessKey: cfg.SourceS3AccessKey,
 		SecretKey: cfg.SourceS3SecretKey,
 		Region:    cfg.SourceS3Region,
-	}, "source")
+	}, "source", cfg.SourceProviderKind)
 	if err != nil {
 		return fmt.Errorf("source storage: %w", err)
 	}
@@ -139,7 +141,7 @@ func run(cfg *config.Config) error {
 		AccessKey: cfg.MediaS3AccessKey,
 		SecretKey: cfg.MediaS3SecretKey,
 		Region:    cfg.MediaS3Region,
-	}, "media")
+	}, "media", cfg.MediaProviderKind)
 	if err != nil {
 		return fmt.Errorf("media storage: %w", err)
 	}
@@ -168,6 +170,16 @@ func run(cfg *config.Config) error {
 
 	// Initialize DB queries.
 	queries := dbq.New(pool)
+	expectedTarget, err := cfg.DeploymentTarget()
+	if err != nil {
+		return fmt.Errorf("deployment target config: %w", err)
+	}
+	target, err := deployment.BindTarget(ctx, queries, expectedTarget)
+	if err != nil {
+		return fmt.Errorf("deployment target guard: %w", err)
+	}
+	lifecycleCoordinator := lifecycle.NewCoordinator(pool)
+	lifecycleCoordinator.ConfigureStrictCleanupReadiness(mediaStore, cfg.MediaBucket)
 
 	// Initialize asynq inspector (for task cancellation).
 	inspector, err := queue.NewInspector(cfg.RedisURL)
@@ -182,6 +194,7 @@ func run(cfg *config.Config) error {
 		Cache:       lru,
 		QueueClient: queueClient,
 		DBQueries:   queries,
+		Lifecycle:   lifecycleCoordinator,
 		Inspector:   inspector,
 		Redis:       redisClient,
 		KeyWrapper:  keyWrapper,
@@ -189,15 +202,17 @@ func run(cfg *config.Config) error {
 		RedisPing: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
 		},
+		Target: target,
 	}
 
 	// Initialize webhook client.
-	webhookClient := webhook.NewClient(cfg.WebhookSecret, queries)
+	webhookClient := webhook.NewClient(cfg.WebhookSecret, queries, lifecycleCoordinator)
 
 	workerDeps := &handlers.Deps{
 		SourceStore: sourceStore,
 		MediaStore:  mediaStore,
 		Queries:     queries,
+		Lifecycle:   lifecycleCoordinator,
 		QueueClient: queueClient,
 		Config:      cfg,
 		KeyWrapper:  keyWrapper,
@@ -218,13 +233,13 @@ func run(cfg *config.Config) error {
 	}
 }
 
-func newS3Store(ctx context.Context, cfg storage.S3Config, role string) (storage.Storage, error) {
+func newS3Store(ctx context.Context, cfg storage.S3Config, role, providerKind string) (storage.Storage, error) {
 	store, err := storage.NewS3(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return storage.WithInstrumentation(store, role, "s3"), nil
+	return storage.WithInstrumentation(store, role, providerKind), nil
 }
 
 // runServer starts only the HTTP server.
@@ -288,11 +303,11 @@ func runAll(ctx context.Context, cfg *config.Config, deps *server.Deps, workerDe
 // registerHandlers wires up all task handlers onto the worker server.
 // Individual handler implementations live in internal/queue/handlers/.
 func registerHandlers(wrk *queue.Server, d *handlers.Deps) {
-	wrk.HandleFunc(queue.TypeImageThumbnail, handlers.HandleImageThumbnail(d))
-	wrk.HandleFunc(queue.TypeVideoCover, handlers.HandleVideoCover(d))
-	wrk.HandleFunc(queue.TypeVideoPreview, handlers.HandleVideoPreview(d))
-	wrk.HandleFunc(queue.TypeVideoTranscode, handlers.HandleVideoTranscode(d))
-	wrk.HandleFunc(queue.TypeVideoFull, handlers.HandleVideoFull(d))
+	wrk.HandleFunc(queue.TypeImageThumbnail, handlers.GuardLifecycle(d, handlers.HandleImageThumbnail))
+	wrk.HandleFunc(queue.TypeVideoCover, handlers.GuardLifecycle(d, handlers.HandleVideoCover))
+	wrk.HandleFunc(queue.TypeVideoPreview, handlers.GuardLifecycle(d, handlers.HandleVideoPreview))
+	wrk.HandleFunc(queue.TypeVideoTranscode, handlers.GuardLifecycle(d, handlers.HandleVideoTranscode))
+	wrk.HandleFunc(queue.TypeVideoFull, handlers.GuardLifecycle(d, handlers.HandleVideoFull))
 	slog.Info("task handlers registered")
 }
 
@@ -313,6 +328,7 @@ func printBanner(cfg *config.Config) {
 		fmt.Fprintf(w, "  Listen:  http://0.0.0.0:%d\n", cfg.Port)
 	}
 	fmt.Fprintf(w, "  Buckets: source=%s  media=%s\n", cfg.SourceBucket, cfg.MediaBucket)
+	fmt.Fprintf(w, "  Deployment: %s (protocol v%d)\n", cfg.DeploymentID, deployment.ProtocolVersion)
 	fmt.Fprintf(w, "  Log:     %s\n", cfg.LogLevel)
 	fmt.Fprintf(w, "\n")
 }

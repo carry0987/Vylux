@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"Vylux/internal/config"
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
+	"Vylux/internal/lifecycle"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
 	apptracing "Vylux/internal/tracing"
@@ -30,6 +32,7 @@ type Deps struct {
 	SourceStore storage.Storage
 	MediaStore  storage.Storage
 	Queries     *dbq.Queries
+	Lifecycle   lifecycle.HashCoordinator
 	QueueClient *queue.Client
 	Config      *config.Config
 	KeyWrapper  *encryption.KeyWrapper
@@ -40,6 +43,7 @@ type Deps struct {
 type jobMeta struct {
 	Type        string
 	Hash        string
+	Source      string
 	CallbackURL string
 }
 
@@ -275,6 +279,7 @@ func (d *Deps) completeJob(ctx context.Context, jobID string, meta jobMeta, resu
 		Results: data,
 	}); err != nil {
 		slog.Error("update completed job", apptracing.LogFields(ctx, "job_id", jobID, "error", err)...)
+		return fmt.Errorf("update completed job %s: %w", jobID, err)
 	}
 	slog.Info("job completed", apptracing.LogFields(ctx, "job_id", jobID)...)
 
@@ -284,6 +289,7 @@ func (d *Deps) completeJob(ctx context.Context, jobID string, meta jobMeta, resu
 			JobID:   jobID,
 			Type:    meta.Type,
 			Hash:    meta.Hash,
+			Source:  meta.Source,
 			Status:  "completed",
 			Results: results,
 		})
@@ -314,6 +320,7 @@ func (d *Deps) failJobWithResult(ctx context.Context, jobID string, meta jobMeta
 		Results: data,
 	}); err != nil {
 		slog.Error("update job status (fail)", apptracing.LogFields(ctx, "job_id", jobID, "error", err)...)
+		return errors.Join(jobErr, fmt.Errorf("update failed job %s: %w", jobID, err))
 	}
 
 	// Deliver failure webhook callback in the background.
@@ -322,6 +329,7 @@ func (d *Deps) failJobWithResult(ctx context.Context, jobID string, meta jobMeta
 			JobID:   jobID,
 			Type:    meta.Type,
 			Hash:    meta.Hash,
+			Source:  meta.Source,
 			Status:  "failed",
 			Error:   jobErr.Error(),
 			Results: results,
@@ -331,12 +339,24 @@ func (d *Deps) failJobWithResult(ctx context.Context, jobID string, meta jobMeta
 	return jobErr
 }
 
+func (d *Deps) markProcessing(ctx context.Context, jobID string) error {
+	if err := d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
+		ID:     jobID,
+		Status: "processing",
+	}); err != nil {
+		return fmt.Errorf("mark job %s processing: %w", jobID, err)
+	}
+	return nil
+}
+
 // setProgress is a convenience wrapper for UpdateJobProgress.
-func (d *Deps) setProgress(ctx context.Context, jobID string, pct int32) {
+func (d *Deps) setProgress(ctx context.Context, jobID string, pct int32) error {
 	if err := d.Queries.UpdateJobProgress(ctx, dbq.UpdateJobProgressParams{
 		ID:       jobID,
 		Progress: pct,
 	}); err != nil {
 		slog.Error("update job progress", apptracing.LogFields(ctx, "job_id", jobID, "pct", pct, "error", err)...)
+		return fmt.Errorf("update job %s progress to %d: %w", jobID, pct, err)
 	}
+	return nil
 }

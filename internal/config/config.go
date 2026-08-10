@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"Vylux/internal/deployment"
+
 	"github.com/caarlos0/env/v11"
 	redis "github.com/redis/go-redis/v9"
 )
@@ -18,6 +20,9 @@ type Config struct {
 	Mode    string `env:"MODE" envDefault:"all"`  // "all" | "server" | "worker"
 	BaseURL string `env:"BASE_URL" envDefault:""` // Public base URL for key delivery (e.g. https://static.example.com)
 
+	// Stable logical identity checked against the lifecycle database at startup.
+	DeploymentID string `env:"DEPLOYMENT_ID,required"`
+
 	// Database
 	DatabaseURL string `env:"DATABASE_URL,required"`
 
@@ -25,18 +30,20 @@ type Config struct {
 	RedisURL string `env:"REDIS_URL,required"`
 
 	// Source storage (read-only)
-	SourceS3Endpoint  string `env:"SOURCE_S3_ENDPOINT,required"`
-	SourceS3AccessKey string `env:"SOURCE_S3_ACCESS_KEY,required"`
-	SourceS3SecretKey string `env:"SOURCE_S3_SECRET_KEY,required"`
-	SourceS3Region    string `env:"SOURCE_S3_REGION" envDefault:"auto"`
-	SourceBucket      string `env:"SOURCE_BUCKET,required"`
+	SourceProviderKind string `env:"SOURCE_PROVIDER_KIND,required"`
+	SourceS3Endpoint   string `env:"SOURCE_S3_ENDPOINT,required"`
+	SourceS3AccessKey  string `env:"SOURCE_S3_ACCESS_KEY,required"`
+	SourceS3SecretKey  string `env:"SOURCE_S3_SECRET_KEY,required"`
+	SourceS3Region     string `env:"SOURCE_S3_REGION" envDefault:"auto"`
+	SourceBucket       string `env:"SOURCE_BUCKET,required"`
 
 	// Media storage (read-write)
-	MediaS3Endpoint  string `env:"MEDIA_S3_ENDPOINT,required"`
-	MediaS3AccessKey string `env:"MEDIA_S3_ACCESS_KEY,required"`
-	MediaS3SecretKey string `env:"MEDIA_S3_SECRET_KEY,required"`
-	MediaS3Region    string `env:"MEDIA_S3_REGION" envDefault:"auto"`
-	MediaBucket      string `env:"MEDIA_BUCKET,required"`
+	MediaProviderKind string `env:"MEDIA_PROVIDER_KIND,required"`
+	MediaS3Endpoint   string `env:"MEDIA_S3_ENDPOINT,required"`
+	MediaS3AccessKey  string `env:"MEDIA_S3_ACCESS_KEY,required"`
+	MediaS3SecretKey  string `env:"MEDIA_S3_SECRET_KEY,required"`
+	MediaS3Region     string `env:"MEDIA_S3_REGION" envDefault:"auto"`
+	MediaBucket       string `env:"MEDIA_BUCKET,required"`
 
 	// Secrets
 	HMACSecret     string `env:"HMAC_SECRET,required"`      // Image URL signing
@@ -86,6 +93,24 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+func (c *Config) DeploymentTarget() (deployment.Target, error) {
+	return deployment.NewTarget(
+		c.DeploymentID,
+		deployment.BackendConfig{
+			ProviderKind: c.SourceProviderKind,
+			Endpoint:     c.SourceS3Endpoint,
+			Region:       c.SourceS3Region,
+			Bucket:       c.SourceBucket,
+		},
+		deployment.BackendConfig{
+			ProviderKind: c.MediaProviderKind,
+			Endpoint:     c.MediaS3Endpoint,
+			Region:       c.MediaS3Region,
+			Bucket:       c.MediaBucket,
+		},
+	)
+}
+
 // Validate performs semantic validation on the loaded configuration.
 // It returns a slice of human-readable error strings (empty if all OK).
 func (c *Config) Validate() []string {
@@ -96,6 +121,10 @@ func (c *Config) Validate() []string {
 	case "all", "server", "worker":
 	default:
 		errs = append(errs, fmt.Sprintf("MODE must be all|server|worker, got %q", c.Mode))
+	}
+
+	if _, err := c.DeploymentTarget(); err != nil {
+		errs = append(errs, err.Error())
 	}
 
 	// HMAC_SECRET: expect 64 hex chars (256-bit).
@@ -181,9 +210,16 @@ func (c *Config) Validate() []string {
 }
 
 func (c *Config) normalize() {
+	c.DeploymentID = strings.TrimSpace(c.DeploymentID)
+	c.SourceProviderKind = strings.ToLower(strings.TrimSpace(c.SourceProviderKind))
+	c.MediaProviderKind = strings.ToLower(strings.TrimSpace(c.MediaProviderKind))
 	c.BaseURL = normalizeAbsoluteURL(c.BaseURL)
 	c.SourceS3Endpoint = normalizeAbsoluteURL(c.SourceS3Endpoint)
 	c.MediaS3Endpoint = normalizeAbsoluteURL(c.MediaS3Endpoint)
+	c.SourceS3Region = strings.TrimSpace(c.SourceS3Region)
+	c.MediaS3Region = strings.TrimSpace(c.MediaS3Region)
+	c.SourceBucket = strings.TrimSpace(c.SourceBucket)
+	c.MediaBucket = strings.TrimSpace(c.MediaBucket)
 	if strings.Contains(c.OTELEndpoint, "://") {
 		c.OTELEndpoint = normalizeAbsoluteURL(c.OTELEndpoint)
 	}

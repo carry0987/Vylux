@@ -13,13 +13,17 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/deployment"
 	"Vylux/internal/jobflow"
+	"Vylux/internal/lifecycle"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
 	apptracing "Vylux/internal/tracing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/labstack/echo/v5"
@@ -29,41 +33,46 @@ import (
 
 // JobRequest is the incoming JSON body for POST /api/jobs.
 type JobRequest struct {
-	Type        string         `json:"type"`
-	Hash        string         `json:"hash"`
-	Source      string         `json:"source"`
-	Options     map[string]any `json:"options,omitempty"`
-	CallbackURL string         `json:"callback_url"`
+	RequestID        string             `json:"request_id,omitempty"`
+	Type             string             `json:"type"`
+	Hash             string             `json:"hash"`
+	Source           string             `json:"source"`
+	Options          map[string]any     `json:"options,omitempty"`
+	CallbackURL      string             `json:"callback_url"`
+	DeploymentTarget *deployment.Target `json:"deployment_target,omitempty"`
 }
 
 // JobResponse is the JSON response after creating or returning a job.
 type JobResponse struct {
-	JobID  *string `json:"job_id"` // nil when returning cached result
-	Hash   string  `json:"hash"`
-	Status string  `json:"status"`
+	JobID            *string           `json:"job_id"` // nil when returning cached result
+	Hash             string            `json:"hash"`
+	Status           string            `json:"status"`
+	DeploymentTarget deployment.Target `json:"deployment_target"`
 	// Results is included only when the job is already completed.
 	Results any `json:"results,omitempty"`
 }
 
 // JobStatusResponse is the JSON response for GET /api/jobs/:id.
 type JobStatusResponse struct {
-	JobID          string `json:"job_id"`
-	Type           string `json:"type"`
-	Hash           string `json:"hash"`
-	Status         string `json:"status"`
-	CallbackStatus string `json:"callback_status"`
-	Progress       int32  `json:"progress"`
-	RetryOfJobID   string `json:"retry_of_job_id,omitempty"`
-	Error          string `json:"error,omitempty"`
-	Results        any    `json:"results,omitempty"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	JobID            string            `json:"job_id"`
+	Type             string            `json:"type"`
+	Hash             string            `json:"hash"`
+	Status           string            `json:"status"`
+	CallbackStatus   string            `json:"callback_status"`
+	Progress         int32             `json:"progress"`
+	RetryOfJobID     string            `json:"retry_of_job_id,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Results          any               `json:"results,omitempty"`
+	CreatedAt        string            `json:"created_at"`
+	UpdatedAt        string            `json:"updated_at"`
+	DeploymentTarget deployment.Target `json:"deployment_target"`
 }
 
 type RetryJobResponse struct {
-	SourceJobID string         `json:"source_job_id"`
-	Strategy    string         `json:"strategy"`
-	Jobs        []RetryJobInfo `json:"jobs"`
+	SourceJobID      string            `json:"source_job_id"`
+	Strategy         string            `json:"strategy"`
+	Jobs             []RetryJobInfo    `json:"jobs"`
+	DeploymentTarget deployment.Target `json:"deployment_target"`
 }
 
 type RetryJobInfo struct {
@@ -83,6 +92,8 @@ type JobHandler struct {
 	sourceBucket   string
 	largeThreshold int64
 	maxFileSize    int64
+	coordinator    lifecycle.HashCoordinator
+	target         deployment.Target
 }
 
 type jobRequestError struct {
@@ -107,15 +118,22 @@ func NewJobHandler(
 	sourceBucket string,
 	largeThreshold int64,
 	maxFileSize int64,
+	target deployment.Target,
+	coordinators ...lifecycle.HashCoordinator,
 ) *JobHandler {
-	return &JobHandler{
+	handler := &JobHandler{
 		queries:        queries,
 		queueClient:    queueClient,
 		sourceStore:    sourceStore,
 		sourceBucket:   sourceBucket,
 		largeThreshold: largeThreshold,
 		maxFileSize:    maxFileSize,
+		target:         target,
 	}
+	if len(coordinators) > 0 {
+		handler.coordinator = coordinators[0]
+	}
+	return handler
 }
 
 // Create handles POST /api/jobs.
@@ -123,13 +141,18 @@ func NewJobHandler(
 // Flow:
 //  1. Validate request
 //  2. Idempotency check — if a non-failed job exists for the same request fingerprint, return it
-//  3. Enqueue task via asynq
-//  4. Persist job row in DB
+//  3. Persist a durable job intent in PostgreSQL
+//  4. Enqueue an Asynq task whose ID is the durable job ID
 //  5. Return 202 Accepted
 func (h *JobHandler) Create(c *echo.Context) error {
+	h.target.SetHeaders(c.Response().Header())
 	req, err := decodeJobRequest(c)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON body")
+	}
+
+	if err := h.requireDeploymentTarget(req.DeploymentTarget); err != nil {
+		return err
 	}
 
 	if err := validateJobRequest(&req); err != nil {
@@ -147,41 +170,35 @@ func (h *JobHandler) Create(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to normalize request")
 	}
 
-	// ── Idempotency check ──
-	existing, err := h.queries.GetActiveJobByFingerprint(ctx, fingerprint)
-	if err == nil {
-		// A non-failed/canceled job already exists.
-		resp := JobResponse{
-			Hash:   existing.Hash,
-			Status: existing.Status,
-		}
-		if existing.Status == "completed" {
-			resp.Results = existing.Results
-			return c.JSON(http.StatusOK, resp)
-		}
-		id := existing.ID
-		resp.JobID = &id
-		return c.JSON(http.StatusOK, resp)
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		slog.Error("idempotency check failed", apptracing.LogFields(ctx, "error", err)...)
-		return echo.NewHTTPError(http.StatusInternalServerError, "database error")
-	}
-
 	created, err := h.createOrReuseJob(ctx, req, fingerprint, "")
 	if err != nil {
 		return err
 	}
 	jobID := created.JobID
-	return c.JSON(http.StatusAccepted, JobResponse{
-		JobID:  &jobID,
-		Hash:   req.Hash,
-		Status: created.Status,
-	})
+	response := JobResponse{
+		JobID:            &jobID,
+		Hash:             req.Hash,
+		Status:           created.Status,
+		Results:          created.Results,
+		DeploymentTarget: h.target,
+	}
+	if created.Reused && created.Status == "completed" && req.RequestID == "" {
+		response.JobID = nil
+	}
+	status := http.StatusAccepted
+	if created.Reused {
+		status = http.StatusOK
+	}
+	return c.JSON(status, response)
 }
 
 // GetStatus handles GET /api/jobs/:id.
 func (h *JobHandler) GetStatus(c *echo.Context) error {
+	h.target.SetHeaders(c.Response().Header())
+	if err := h.requireDeploymentTarget(nil); err != nil {
+		return err
+	}
+
 	jobID := c.Param("id")
 	if jobID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing job id")
@@ -196,14 +213,15 @@ func (h *JobHandler) GetStatus(c *echo.Context) error {
 	}
 
 	resp := JobStatusResponse{
-		JobID:          job.ID,
-		Type:           job.Type,
-		Hash:           job.Hash,
-		Status:         job.Status,
-		CallbackStatus: job.CallbackStatus,
-		Progress:       job.Progress,
-		CreatedAt:      job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:      job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		JobID:            job.ID,
+		Type:             job.Type,
+		Hash:             job.Hash,
+		Status:           job.Status,
+		CallbackStatus:   job.CallbackStatus,
+		Progress:         job.Progress,
+		CreatedAt:        job.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:        job.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		DeploymentTarget: h.target,
 	}
 
 	if job.RetryOfJobID.Valid {
@@ -221,6 +239,11 @@ func (h *JobHandler) GetStatus(c *echo.Context) error {
 
 // Retry handles POST /api/jobs/:id/retry.
 func (h *JobHandler) Retry(c *echo.Context) error {
+	h.target.SetHeaders(c.Response().Header())
+	if err := h.requireDeploymentTarget(nil); err != nil {
+		return err
+	}
+
 	jobID := c.Param("id")
 	if jobID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing job id")
@@ -245,9 +268,10 @@ func (h *JobHandler) Retry(c *echo.Context) error {
 	}
 
 	resp := RetryJobResponse{
-		SourceJobID: job.ID,
-		Strategy:    strategy,
-		Jobs:        make([]RetryJobInfo, 0, len(retryReqs)),
+		SourceJobID:      job.ID,
+		Strategy:         strategy,
+		Jobs:             make([]RetryJobInfo, 0, len(retryReqs)),
+		DeploymentTarget: h.target,
 	}
 
 	for _, req := range retryReqs {
@@ -275,6 +299,28 @@ func (h *JobHandler) Retry(c *echo.Context) error {
 	return c.JSON(http.StatusAccepted, resp)
 }
 
+func (h *JobHandler) requireDeploymentTarget(expected *deployment.Target) error {
+	if err := h.target.Validate(); err != nil {
+		return echo.NewHTTPError(
+			http.StatusServiceUnavailable,
+			"deployment target is unavailable",
+		).Wrap(err)
+	}
+	if expected == nil {
+		return nil
+	}
+	if err := expected.Validate(); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid deployment target precondition").Wrap(err)
+	}
+	if err := h.target.Require(*expected); err != nil {
+		return echo.NewHTTPError(
+			http.StatusPreconditionFailed,
+			"deployment target precondition failed",
+		).Wrap(err)
+	}
+	return nil
+}
+
 // ── Private helpers ──
 
 // validJobTypes lists accepted values for the "type" field.
@@ -295,6 +341,14 @@ func validateJobRequest(r *JobRequest) error {
 	}
 	if r.Source == "" {
 		return fmt.Errorf("source is required")
+	}
+	if err := normalizeJobLifecycleIdentity(r); err != nil {
+		return err
+	}
+	if r.RequestID != "" {
+		if _, err := uuid.Parse(r.RequestID); err != nil {
+			return fmt.Errorf("request_id must be a UUID")
+		}
 	}
 	if err := validateCallbackURL(r.CallbackURL); err != nil {
 		return err
@@ -366,8 +420,20 @@ func decodeJobRequest(c *echo.Context) (JobRequest, error) {
 }
 
 func canonicalizeJobRequest(r *JobRequest) error {
+	if err := normalizeJobLifecycleIdentity(r); err != nil {
+		return err
+	}
+
 	if r.Options == nil {
 		r.Options = map[string]any{}
+	}
+
+	if r.RequestID != "" {
+		requestID, err := uuid.Parse(r.RequestID)
+		if err != nil {
+			return fmt.Errorf("request_id must be a UUID")
+		}
+		r.RequestID = requestID.String()
 	}
 
 	switch r.Type {
@@ -417,6 +483,24 @@ func canonicalizeJobRequest(r *JobRequest) error {
 	return nil
 }
 
+func normalizeJobLifecycleIdentity(r *JobRequest) error {
+	hash, ok := lifecycle.NormalizeHash(r.Hash)
+	if !ok {
+		return fmt.Errorf("hash must be a 64-character hexadecimal SHA-256")
+	}
+	if strings.TrimSpace(r.Source) == "" {
+		return fmt.Errorf("source is required")
+	}
+	sourceHash, ok := lifecycle.ExtractHash(r.Source)
+	if !ok {
+		return fmt.Errorf("source does not contain an attributable content hash")
+	}
+	if sourceHash != hash {
+		return fmt.Errorf("source content hash does not match hash")
+	}
+	r.Hash = hash
+	return nil
+}
 func parseVideoCoverOptions(opts map[string]any) (queue.VideoCoverOptions, error) {
 	return decodeOptionsStrict[queue.VideoCoverOptions](opts)
 }
@@ -482,21 +566,31 @@ func canonicalizeVideoFullOptions(opts *queue.VideoFullOptions) {
 
 func requestFingerprint(r JobRequest) (string, error) {
 	payload, err := json.Marshal(struct {
-		Type    string         `json:"type"`
-		Hash    string         `json:"hash"`
-		Source  string         `json:"source"`
-		Options map[string]any `json:"options"`
+		RequestID   string         `json:"request_id,omitempty"`
+		Type        string         `json:"type"`
+		Hash        string         `json:"hash"`
+		Source      string         `json:"source"`
+		Options     map[string]any `json:"options"`
+		CallbackURL string         `json:"callback_url,omitempty"`
 	}{
-		Type:    r.Type,
-		Hash:    r.Hash,
-		Source:  r.Source,
-		Options: r.Options,
+		RequestID:   r.RequestID,
+		Type:        r.Type,
+		Hash:        r.Hash,
+		Source:      r.Source,
+		Options:     r.Options,
+		CallbackURL: requestTokenCallbackURL(r),
 	})
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:]), nil
+}
+func requestTokenCallbackURL(r JobRequest) string {
+	if r.RequestID == "" {
+		return ""
+	}
+	return r.CallbackURL
 }
 
 func optionsJSON(opts map[string]any) (json.RawMessage, error) {
@@ -524,54 +618,188 @@ func parseOptions(raw json.RawMessage) (map[string]any, error) {
 	return opts, nil
 }
 
-func (h *JobHandler) createOrReuseJob(ctx context.Context, req JobRequest, fingerprint string, retryOfJobID string) (*RetryJobInfo, error) {
-	existing, err := h.queries.GetActiveJobByFingerprint(ctx, fingerprint)
-	if err == nil {
-		return &RetryJobInfo{JobID: existing.ID, Type: existing.Type, Status: existing.Status}, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		slog.Error("idempotency check failed", apptracing.LogFields(ctx, "error", err)...)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "database error")
-	}
+type jobCreationResult struct {
+	JobID        string
+	Type         string
+	Status       string
+	RetryOfJobID string
+	Results      any
+	Reused       bool
+}
 
-	taskInfo, err := h.enqueueTask(ctx, req)
-	if err != nil {
-		if requestErr, ok := errors.AsType[*jobRequestError](err); ok {
-			return nil, echo.NewHTTPError(requestErr.status, requestErr.message)
+func (h *JobHandler) createOrReuseJob(
+	ctx context.Context,
+	req JobRequest,
+	fingerprint string,
+	retryOfJobID string,
+) (*jobCreationResult, error) {
+	var result *jobCreationResult
+	err := h.withHashLock(ctx, req.Hash, func(lockedQueries *dbq.Queries) error {
+		if err := lifecycle.RejectTombstoned(ctx, lockedQueries, req.Hash, req.Source); err != nil {
+			if errors.Is(err, lifecycle.ErrTombstoned) {
+				return echo.NewHTTPError(http.StatusGone, "media source was permanently deleted").Wrap(err)
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "database error").Wrap(err)
 		}
-		slog.Error("enqueue failed", apptracing.LogFields(ctx,
-			"type", req.Type,
-			"hash", req.Hash,
-			"error", err,
-		)...)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to enqueue task")
-	}
 
-	options, err := optionsJSON(req.Options)
+		if req.RequestID != "" {
+			existing, err := lockedQueries.GetJob(ctx, req.RequestID)
+			if err == nil {
+				if existing.RequestFingerprint != fingerprint {
+					return echo.NewHTTPError(http.StatusConflict, "request_id already belongs to a different job")
+				}
+				if err := h.ensureQueuedTask(ctx, existing); err != nil {
+					return echo.NewHTTPError(http.StatusInternalServerError, "failed to restore queued task").Wrap(err)
+				}
+				result = creationResultFromJob(existing, retryOfJobID)
+				return nil
+			}
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return echo.NewHTTPError(http.StatusInternalServerError, "database error").Wrap(err)
+			}
+		}
+
+		existing, err := lockedQueries.GetActiveJobByFingerprint(ctx, fingerprint)
+		if err == nil {
+			result = creationResultFromJob(existing, retryOfJobID)
+			if err := h.ensureQueuedTask(ctx, existing); err != nil {
+				return echo.NewHTTPError(http.StatusInternalServerError, "failed to restore queued task").Wrap(err)
+			}
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusInternalServerError, "database error").Wrap(err)
+		}
+
+		sourceSize, err := h.sourceSizeForRequest(ctx, req)
+		if err != nil {
+			if requestErr, ok := errors.AsType[*jobRequestError](err); ok {
+				return echo.NewHTTPError(requestErr.status, requestErr.message).Wrap(err)
+			}
+			return echo.NewHTTPError(http.StatusInternalServerError, "source inspection failed").Wrap(err)
+		}
+		options, err := optionsJSON(req.Options)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to serialize options").Wrap(err)
+		}
+
+		jobID := req.RequestID
+		if jobID == "" {
+			jobID = uuid.NewString()
+		}
+		retryOf := pgtype.Text{}
+		if retryOfJobID != "" {
+			retryOf = pgtype.Text{String: retryOfJobID, Valid: true}
+		}
+
+		if err := lockedQueries.CreateJob(ctx, dbq.CreateJobParams{
+			ID:                 jobID,
+			Type:               req.Type,
+			Hash:               req.Hash,
+			Source:             req.Source,
+			Options:            options,
+			RequestFingerprint: fingerprint,
+			Status:             "queued",
+			CallbackUrl:        req.CallbackURL,
+			RetryOfJobID:       retryOf,
+		}); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to persist job intent").Wrap(err)
+		}
+
+		if _, err := h.enqueueTask(ctx, req, jobID, sourceSize); err != nil {
+			compensationCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+			compensationErr := h.queueClient.RemoveTask(compensationCtx, jobID)
+			if compensationErr == nil {
+				if deleteErr := lockedQueries.DeleteJob(compensationCtx, jobID); deleteErr != nil {
+					compensationErr = fmt.Errorf("delete failed job intent: %w", deleteErr)
+				}
+			}
+			cancel()
+			if compensationErr != nil {
+				err = errors.Join(err, compensationErr)
+			}
+			slog.Error("enqueue failed", apptracing.LogFields(ctx, "job_id", jobID, "type", req.Type, "hash", req.Hash, "error", err)...)
+			return echo.NewHTTPError(http.StatusInternalServerError, "failed to enqueue task").Wrap(err)
+		}
+
+		result = &jobCreationResult{
+			JobID:        jobID,
+			Type:         req.Type,
+			Status:       "queued",
+			RetryOfJobID: retryOfJobID,
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to serialize options")
+		return nil, err
+	}
+	return result, nil
+}
+
+func (h *JobHandler) ensureQueuedTask(ctx context.Context, job dbq.Job) error {
+	if job.Status != "queued" {
+		return nil
+	}
+	if h.queueClient == nil {
+		return fmt.Errorf("queue client is unavailable")
 	}
 
-	retryOf := pgtype.Text{}
-	if retryOfJobID != "" {
-		retryOf = pgtype.Text{String: retryOfJobID, Valid: true}
+	exists, err := h.queueClient.TaskExists(ctx, job.ID)
+	if err != nil {
+		return fmt.Errorf("inspect queued task %s: %w", job.ID, err)
+	}
+	if exists {
+		return nil
 	}
 
-	if err := h.queries.CreateJob(ctx, dbq.CreateJobParams{
-		ID:                 taskInfo.ID,
-		Type:               req.Type,
-		Hash:               req.Hash,
-		Source:             req.Source,
-		Options:            options,
-		RequestFingerprint: fingerprint,
-		Status:             "queued",
-		CallbackUrl:        req.CallbackURL,
-		RetryOfJobID:       retryOf,
-	}); err != nil {
-		slog.Error("create job row failed", apptracing.LogFields(ctx, "id", taskInfo.ID, "error", err)...)
+	storedOptions, err := parseOptions(job.Options)
+	if err != nil {
+		return fmt.Errorf("decode queued task %s options: %w", job.ID, err)
 	}
+	request := JobRequest{
+		Type:        job.Type,
+		Hash:        job.Hash,
+		Source:      job.Source,
+		Options:     storedOptions,
+		CallbackURL: job.CallbackUrl,
+	}
+	sourceSize, err := h.sourceSizeForRequest(ctx, request)
+	if err != nil {
+		return fmt.Errorf("inspect source for queued task %s: %w", job.ID, err)
+	}
+	_, enqueueErr := h.enqueueTask(ctx, request, job.ID, sourceSize)
+	if enqueueErr == nil {
+		return nil
+	}
+	exists, inspectErr := h.queueClient.TaskExists(ctx, job.ID)
+	if inspectErr != nil {
+		return errors.Join(
+			enqueueErr,
+			fmt.Errorf("verify queued task %s after enqueue failure: %w", job.ID, inspectErr),
+		)
+	}
+	if exists {
+		return nil
+	}
+	return enqueueErr
+}
 
-	return &RetryJobInfo{JobID: taskInfo.ID, Type: req.Type, Status: "queued", RetryOfJobID: retryOfJobID}, nil
+func (h *JobHandler) withHashLock(ctx context.Context, hash string, run func(*dbq.Queries) error) error {
+	if h.coordinator == nil {
+		return run(h.queries)
+	}
+	return h.coordinator.WithHashLock(ctx, hash, run)
+}
+
+func creationResultFromJob(job dbq.Job, retryOfJobID string) *jobCreationResult {
+	return &jobCreationResult{
+		JobID:        job.ID,
+		Type:         job.Type,
+		Status:       job.Status,
+		RetryOfJobID: retryOfJobID,
+		Results:      job.Results,
+		Reused:       true,
+	}
 }
 
 func (h *JobHandler) buildRetryRequests(job *dbq.Job) ([]JobRequest, string, error) {
@@ -708,12 +936,8 @@ func (h *JobHandler) sourceSizeForRequest(ctx context.Context, req JobRequest) (
 }
 
 // enqueueTask dispatches the request to the appropriate queue method.
-func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfoCompat, error) {
+func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest, taskID string, sourceSize int64) (*taskInfoCompat, error) {
 	traceCarrier := apptracing.CaptureCarrier(ctx)
-	sourceSize, err := h.sourceSizeForRequest(ctx, req)
-	if err != nil {
-		return nil, err
-	}
 
 	switch req.Type {
 	case queue.TypeImageThumbnail:
@@ -724,7 +948,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Outputs:      parseThumbnailOutputs(req.Options),
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueImageThumbnail(ctx, &payload)
+		info, err := h.queueClient.EnqueueImageThumbnail(ctx, taskID, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -742,7 +966,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			TimestampSec: options.TimestampSec,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoCover(ctx, &payload)
+		info, err := h.queueClient.EnqueueVideoCover(ctx, taskID, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -764,7 +988,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Format:       options.Format,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoPreview(ctx, &payload)
+		info, err := h.queueClient.EnqueueVideoPreview(ctx, taskID, &payload)
 		if err != nil {
 			return nil, err
 		}
@@ -782,7 +1006,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Encrypt:      options.Encrypt,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoTranscode(ctx, &payload, sourceSize, h.largeThreshold)
+		info, err := h.queueClient.EnqueueVideoTranscode(ctx, taskID, &payload, sourceSize, h.largeThreshold)
 		if err != nil {
 			return nil, err
 		}
@@ -801,7 +1025,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Options:      options,
 			CallbackURL:  req.CallbackURL,
 		}
-		info, err := h.queueClient.EnqueueVideoFull(ctx, &payload, sourceSize, h.largeThreshold)
+		info, err := h.queueClient.EnqueueVideoFull(ctx, taskID, &payload, sourceSize, h.largeThreshold)
 		if err != nil {
 			return nil, err
 		}

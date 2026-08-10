@@ -19,7 +19,8 @@ func TestMetricsEndpoint_ExposesPrometheusMetrics(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	sourceKey := "metrics/sample image.png"
+	hash := strings.Repeat("d", 64)
+	sourceKey := "metrics/" + hash + "-sample.png"
 	if err := store.Put(ctx, cfg.SourceBucket, sourceKey, bytes.NewReader(buildTestPNG(t)), "image/png"); err != nil {
 		t.Fatalf("upload source fixture: %v", err)
 	}
@@ -44,7 +45,7 @@ func TestMetricsEndpoint_ExposesPrometheusMetrics(t *testing.T) {
 
 	jobBody, err := json.Marshal(handler.JobRequest{
 		Type:        "image:thumbnail",
-		Hash:        "metrics-job-hash",
+		Hash:        hash,
 		Source:      sourceKey,
 		CallbackURL: "http://example.com/callback",
 	})

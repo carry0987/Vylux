@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"Vylux/internal/db/dbq"
 	"Vylux/internal/image"
 	"Vylux/internal/queue"
 	apptracing "Vylux/internal/tracing"
@@ -51,14 +50,14 @@ func HandleImageThumbnail(d *Deps) func(context.Context, *asynq.Task) error {
 		meta := jobMeta{
 			Type:        queue.TypeImageThumbnail,
 			Hash:        p.Hash,
+			Source:      p.Source,
 			CallbackURL: p.CallbackURL,
 		}
 
 		// Mark processing.
-		_ = d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
-			ID:     taskID,
-			Status: "processing",
-		})
+		if err := d.markProcessing(ctx, taskID); err != nil {
+			return err
+		}
 
 		// Provide sensible defaults when no outputs are specified.
 		if len(p.Outputs) == 0 {
@@ -119,7 +118,9 @@ func HandleImageThumbnail(d *Deps) func(context.Context, *asynq.Task) error {
 
 			// Update progress.
 			pct := int32((i + 1) * 100 / len(p.Outputs))
-			d.setProgress(ctx, taskID, pct)
+			if err := d.setProgress(ctx, taskID, pct); err != nil {
+				return err
+			}
 		}
 
 		return d.completeJob(ctx, taskID, meta, results)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"Vylux/internal/db"
@@ -25,14 +26,16 @@ func TestJobRetry_FailedVideoFullCreatesStageJobs(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	if err := store.Put(ctx, cfg.SourceBucket, "uploads/retry.mp4", bytes.NewReader([]byte("retry-video")), "video/mp4"); err != nil {
+	hash := strings.Repeat("c", 64)
+	source := "uploads/" + hash + "-retry.mp4"
+	if err := store.Put(ctx, cfg.SourceBucket, source, bytes.NewReader([]byte("retry-video")), "video/mp4"); err != nil {
 		t.Fatalf("upload source fixture: %v", err)
 	}
 
 	createBody := handler.JobRequest{
 		Type:        queue.TypeVideoFull,
-		Hash:        "retry-full-hash",
-		Source:      "uploads/retry.mp4",
+		Hash:        hash,
+		Source:      source,
 		CallbackURL: "http://example.com/callback",
 		Options: map[string]any{
 			"cover": map[string]any{
@@ -117,6 +120,14 @@ func TestJobRetry_FailedVideoFullCreatesStageJobs(t *testing.T) {
 	if err := json.NewDecoder(retryResp.Body).Decode(&retryBody); err != nil {
 		t.Fatalf("decode retry response: %v", err)
 	}
+	wantTarget, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build deployment target: %v", err)
+	}
+	if retryBody.DeploymentTarget != wantTarget {
+		t.Fatalf("retry response target = %#v, want %#v", retryBody.DeploymentTarget, wantTarget)
+	}
+	assertDeploymentHeaders(t, retryResp.Header, wantTarget)
 
 	if retryBody.Strategy != jobflow.RetryStrategyRetryTasks {
 		t.Fatalf("expected strategy %q, got %q", jobflow.RetryStrategyRetryTasks, retryBody.Strategy)

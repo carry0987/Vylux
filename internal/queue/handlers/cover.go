@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"Vylux/internal/db/dbq"
 	"Vylux/internal/jobflow"
 	"Vylux/internal/queue"
 	apptracing "Vylux/internal/tracing"
@@ -45,13 +44,13 @@ func HandleVideoCover(d *Deps) func(context.Context, *asynq.Task) error {
 		meta := jobMeta{
 			Type:        queue.TypeVideoCover,
 			Hash:        p.Hash,
+			Source:      p.Source,
 			CallbackURL: p.CallbackURL,
 		}
 
-		_ = d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
-			ID:     taskID,
-			Status: "processing",
-		})
+		if err := d.markProcessing(ctx, taskID); err != nil {
+			return err
+		}
 
 		// Default timestamp.
 		ts := p.TimestampSec
@@ -66,7 +65,9 @@ func HandleVideoCover(d *Deps) func(context.Context, *asynq.Task) error {
 		}
 		defer cleanup()
 
-		d.setProgress(ctx, taskID, 30)
+		if err := d.setProgress(ctx, taskID, 30); err != nil {
+			return err
+		}
 
 		// Extract cover frame.
 		extractCtx, span := startWorkerSpan(ctx, "worker.video.extract_cover",
@@ -85,7 +86,9 @@ func HandleVideoCover(d *Deps) func(context.Context, *asynq.Task) error {
 		)
 		span.End()
 
-		d.setProgress(ctx, taskID, 70)
+		if err := d.setProgress(ctx, taskID, 70); err != nil {
+			return err
+		}
 
 		// Upload to media-bucket.
 		key := videoS3Key(p.Hash, "cover.jpg")

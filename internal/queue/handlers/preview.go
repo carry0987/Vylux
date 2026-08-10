@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"Vylux/internal/db/dbq"
 	"Vylux/internal/jobflow"
 	"Vylux/internal/queue"
 	apptracing "Vylux/internal/tracing"
@@ -45,13 +44,13 @@ func HandleVideoPreview(d *Deps) func(context.Context, *asynq.Task) error {
 		meta := jobMeta{
 			Type:        queue.TypeVideoPreview,
 			Hash:        p.Hash,
+			Source:      p.Source,
 			CallbackURL: p.CallbackURL,
 		}
 
-		_ = d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
-			ID:     taskID,
-			Status: "processing",
-		})
+		if err := d.markProcessing(ctx, taskID); err != nil {
+			return err
+		}
 
 		// Build preview options (GeneratePreview handles zero-value defaults).
 		opts := video.PreviewOptions{
@@ -69,7 +68,9 @@ func HandleVideoPreview(d *Deps) func(context.Context, *asynq.Task) error {
 		}
 		defer cleanup()
 
-		d.setProgress(ctx, taskID, 30)
+		if err := d.setProgress(ctx, taskID, 30); err != nil {
+			return err
+		}
 
 		// Generate animated preview.
 		previewCtx, span := startWorkerSpan(ctx, "worker.video.generate_preview",
@@ -92,7 +93,9 @@ func HandleVideoPreview(d *Deps) func(context.Context, *asynq.Task) error {
 		)
 		span.End()
 
-		d.setProgress(ctx, taskID, 70)
+		if err := d.setProgress(ctx, taskID, 70); err != nil {
+			return err
+		}
 
 		// Upload to media-bucket.
 		ext := result.Format

@@ -149,3 +149,23 @@ func TestConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+func TestDeletePrefixRemovesOnlyHashNamespace(t *testing.T) {
+	c := New(1024)
+	c.Set("hash-a:first", []byte("one"))
+	c.Set("hash-a:second", []byte("two"))
+	c.Set("hash-b:first", []byte("three"))
+
+	if got := c.DeletePrefix("hash-a:"); got != 2 {
+		t.Fatalf("expected two entries deleted, got %d", got)
+	}
+	if _, ok := c.Get("hash-a:first"); ok {
+		t.Fatal("first hash-a entry must be removed")
+	}
+	if _, ok := c.Get("hash-a:second"); ok {
+		t.Fatal("second hash-a entry must be removed")
+	}
+	if data, ok := c.Get("hash-b:first"); !ok || string(data) != "three" {
+		t.Fatalf("other hash namespace must remain, got %q, %v", data, ok)
+	}
+}

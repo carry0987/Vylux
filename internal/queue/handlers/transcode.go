@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 
-	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
 	"Vylux/internal/jobflow"
 	"Vylux/internal/queue"
@@ -52,13 +51,13 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 		meta := jobMeta{
 			Type:        queue.TypeVideoTranscode,
 			Hash:        p.Hash,
+			Source:      p.Source,
 			CallbackURL: p.CallbackURL,
 		}
 
-		_ = d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
-			ID:     taskID,
-			Status: "processing",
-		})
+		if err := d.markProcessing(ctx, taskID); err != nil {
+			return err
+		}
 
 		// Download source video to temp file.
 		tmpPath, cleanupSrc, err := downloadToTemp(ctx, d.SourceStore, d.Config.SourceBucket, p.Source, "vylux-transcode-*")
@@ -67,7 +66,9 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 		}
 		defer cleanupSrc()
 
-		d.setProgress(ctx, taskID, 5)
+		if err := d.setProgress(ctx, taskID, 5); err != nil {
+			return err
+		}
 
 		// Create temp output directory for HLS files.
 		scratchDir, err := prepareTempRoot("")
@@ -111,7 +112,9 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 			slog.Info("CMAF raw-key encryption enabled", apptracing.LogFields(ctx, "job_id", taskID, "hash", p.Hash)...)
 		}
 
-		d.setProgress(ctx, taskID, 10)
+		if err := d.setProgress(ctx, taskID, 10); err != nil {
+			return err
+		}
 
 		// Run FFmpeg transcode.
 		slog.Info("starting transcode",
@@ -140,7 +143,9 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 		)
 		span.End()
 
-		d.setProgress(ctx, taskID, 75)
+		if err := d.setProgress(ctx, taskID, 75); err != nil {
+			return err
+		}
 
 		// Upload all HLS files to media-bucket.
 		uploadedKeys, err := uploadHLSDir(ctx, d.MediaStore, d.Config.MediaBucket, p.Hash, outDir)
@@ -148,7 +153,9 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 			return d.failJob(ctx, taskID, meta, fmt.Errorf("upload HLS: %w", err))
 		}
 
-		d.setProgress(ctx, taskID, 95)
+		if err := d.setProgress(ctx, taskID, 95); err != nil {
+			return err
+		}
 
 		return d.completeJob(ctx, taskID, meta, buildTranscodeResult(p.Hash, results, uploadedKeys, encMaterial))
 	}

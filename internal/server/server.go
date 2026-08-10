@@ -11,8 +11,10 @@ import (
 	"Vylux/internal/cache"
 	"Vylux/internal/config"
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/deployment"
 	"Vylux/internal/encryption"
 	"Vylux/internal/handler"
+	"Vylux/internal/lifecycle"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
@@ -33,11 +35,13 @@ type Deps struct {
 	Cache       *cache.LRU
 	QueueClient *queue.Client
 	DBQueries   *dbq.Queries
+	Lifecycle   lifecycle.HashCoordinator
 	Inspector   *asynq.Inspector
 	Redis       *redis.Client
 	KeyWrapper  *encryption.KeyWrapper
 	DBPing      func(context.Context) error
 	RedisPing   func(context.Context) error
+	Target      deployment.Target
 }
 
 // Server wraps the Echo instance and configuration.
@@ -95,6 +99,8 @@ func (s *Server) registerRoutes() {
 		s.cfg.MediaBucket,
 		s.deps.DBPing,
 		s.deps.RedisPing,
+		strictReadiness(s.deps.Lifecycle),
+		s.deps.Target,
 	)
 	s.echo.GET("/healthz", handler.Healthz)
 	s.echo.GET("/readyz", readyzHandler.Handle)
@@ -109,6 +115,7 @@ func (s *Server) registerRoutes() {
 		s.cfg.SourceBucket,
 		s.cfg.MediaBucket,
 		s.cfg.HMACSecret,
+		s.deps.Lifecycle,
 	)
 	originalHandler := handler.NewOriginalHandler(
 		s.deps.SourceStore,
@@ -140,8 +147,12 @@ func (s *Server) registerRoutes() {
 		s.cfg.SourceBucket,
 		s.cfg.LargeFileThreshold,
 		s.cfg.MaxFileSize,
+		s.deps.Target,
+		s.deps.Lifecycle,
 	)
 	api := s.echo.Group("/api", custommw.APIKeyAuth(s.cfg.APIKey))
+	deploymentHandler := handler.NewDeploymentHandler(s.deps.Target)
+	api.GET("/deployment", deploymentHandler.Handle)
 	api.POST("/jobs", jobHandler.Create,
 		custommw.RedisRateLimit(s.deps.Redis, "jobs", 30, time.Minute, func(c *echo.Context) string {
 			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))
@@ -170,8 +181,11 @@ func (s *Server) registerRoutes() {
 		s.deps.DBQueries,
 		s.deps.Inspector,
 		s.cfg.MediaBucket,
+		s.deps.Target,
+		s.deps.Lifecycle,
 	)
 	api.DELETE("/media/:hash", cleanupHandler.Handle)
+	api.DELETE("/media/:hash/strict", cleanupHandler.HandleStrict)
 
 	// ── Key delivery (Bearer token auth, no API key) ──
 	keyHandler := handler.NewKeyHandler(
@@ -188,4 +202,12 @@ func (s *Server) registerRoutes() {
 			return "ip:" + custommw.HashRateLimitKey(c.RealIP())
 		}),
 	)
+}
+
+func strictReadiness(coordinator lifecycle.HashCoordinator) lifecycle.StrictReadiness {
+	readiness, ok := coordinator.(lifecycle.StrictReadiness)
+	if !ok {
+		return nil
+	}
+	return readiness
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 
-	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
 	"Vylux/internal/jobflow"
 	"Vylux/internal/queue"
@@ -66,15 +65,15 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 		meta := jobMeta{
 			Type:        queue.TypeVideoFull,
 			Hash:        p.Hash,
+			Source:      p.Source,
 			CallbackURL: p.CallbackURL,
 		}
 
 		result := jobflow.NewVideoFullResult()
 
-		_ = d.Queries.UpdateJobStatus(ctx, dbq.UpdateJobStatusParams{
-			ID:     taskID,
-			Status: "processing",
-		})
+		if err := d.markProcessing(ctx, taskID); err != nil {
+			return err
+		}
 
 		// ── 1. Download source video ──
 		tmpPath, cleanupSrc, err := downloadToTemp(ctx, d.SourceStore, d.Config.SourceBucket, p.Source, "vylux-full-*")
@@ -89,7 +88,9 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 		defer cleanupSrc()
 		result.Stages.Source = readyStage()
 
-		d.setProgress(ctx, taskID, 5)
+		if err := d.setProgress(ctx, taskID, 5); err != nil {
+			return err
+		}
 
 		// ── 2. Cover + Preview in parallel ──
 		var coverOutcome coverAttempt
@@ -175,7 +176,9 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 
 		_ = g.Wait()
 
-		d.setProgress(ctx, taskID, 20)
+		if err := d.setProgress(ctx, taskID, 20); err != nil {
+			return err
+		}
 
 		// Upload cover if it was generated successfully.
 		if coverOutcome.err != nil {
@@ -215,7 +218,9 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 
-		d.setProgress(ctx, taskID, 25)
+		if err := d.setProgress(ctx, taskID, 25); err != nil {
+			return err
+		}
 
 		// ── 3. HLS Transcode ──
 		scratchDir, err := prepareTempRoot("")
@@ -292,7 +297,9 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 		)
 		span.End()
 
-		d.setProgress(ctx, taskID, 80)
+		if err := d.setProgress(ctx, taskID, 80); err != nil {
+			return err
+		}
 
 		// Upload all HLS files.
 		uploadedKeys, err := uploadHLSDir(ctx, d.MediaStore, d.Config.MediaBucket, p.Hash, outDir)
@@ -302,7 +309,9 @@ func HandleVideoFull(d *Deps) func(context.Context, *asynq.Task) error {
 			return d.failJobWithResult(ctx, taskID, meta, videoFullFailureError(&result), result)
 		}
 
-		d.setProgress(ctx, taskID, 95)
+		if err := d.setProgress(ctx, taskID, 95); err != nil {
+			return err
+		}
 
 		// ── 4. Build aggregated result ──
 		transcodeArtifact := buildTranscodeResult(p.Hash, tcResults, uploadedKeys, encMaterial)

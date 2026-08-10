@@ -2,6 +2,7 @@ package cache
 
 import (
 	"container/list"
+	"strings"
 	"sync"
 )
 
@@ -98,6 +99,23 @@ func (c *LRU) Delete(key string) bool {
 	c.removeElement(el)
 
 	return true
+}
+
+// DeletePrefix removes every entry in a hash namespace and returns the count.
+func (c *LRU) DeletePrefix(prefix string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	deleted := 0
+	for key, el := range c.items {
+		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		c.removeElement(el)
+		deleted++
+	}
+
+	return deleted
 }
 
 // Len returns the number of entries currently in the cache.

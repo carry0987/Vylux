@@ -105,6 +105,36 @@ func (s *FakeStore) List(_ context.Context, bucket, prefix string) ([]string, er
 	return keys, nil
 }
 
+func (s *FakeStore) ListPage(
+	ctx context.Context,
+	bucket, prefix, continuation string,
+	limit int32,
+) ([]string, string, bool, error) {
+	keys, err := s.List(ctx, bucket, prefix)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	start := sort.SearchStrings(keys, continuation)
+	if continuation != "" && start < len(keys) && keys[start] == continuation {
+		start++
+	}
+	if start > len(keys) {
+		start = len(keys)
+	}
+	end := start + int(limit)
+	if end > len(keys) {
+		end = len(keys)
+	}
+	page := append([]string(nil), keys[start:end]...)
+	done := end == len(keys)
+	next := ""
+	if !done && len(page) > 0 {
+		next = page[len(page)-1]
+	}
+	return page, next, done, nil
+}
+
 func (s *FakeStore) HeadBucket(_ context.Context, bucket string) error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -118,6 +148,10 @@ func (s *FakeStore) HeadBucket(_ context.Context, bucket string) error {
 	}
 
 	return errors.New("bucket does not exist")
+}
+
+func (s *FakeStore) CheckUnversioned(context.Context, string) error {
+	return nil
 }
 
 func storeKey(bucket, key string) string {

@@ -5,9 +5,12 @@
 #   docker compose -f docker-compose.dev.yml up -d
 #
 # Then use .env.local with localhost addresses:
+#   DEPLOYMENT_ID=<uuid-generated-once-for-this-logical-deployment>
 #   DATABASE_URL=postgres://myuser:mypassword@localhost:5434/mydb
 #   REDIS_URL=redis://localhost:6381
+#   SOURCE_PROVIDER_KIND=s3
 #   SOURCE_S3_ENDPOINT=http://localhost:9002
+#   MEDIA_PROVIDER_KIND=s3
 #   MEDIA_S3_ENDPOINT=http://localhost:9002
 #   SOURCE_S3_ACCESS_KEY=...
 #   SOURCE_S3_SECRET_KEY=...

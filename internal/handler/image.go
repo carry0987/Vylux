@@ -12,12 +12,13 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
+	"time"
 
 	"Vylux/internal/cache"
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/image"
+	"Vylux/internal/lifecycle"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/signature"
 	"Vylux/internal/storage"
@@ -30,6 +31,8 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+const imageSourceFetchTimeout = 30 * time.Second
+
 // ImageHandler handles synchronous image processing requests.
 //
 //	GET /img/{sig}/{options}/{encoded_source}.{format}
@@ -41,6 +44,7 @@ type ImageHandler struct {
 	sourceBucket string
 	mediaBucket  string
 	hmacSecret   string
+	coordinator  lifecycle.HashCoordinator
 
 	sourceFlight  singleflight.Group
 	processFlight singleflight.Group
@@ -53,8 +57,9 @@ func NewImageHandler(
 	lru *cache.LRU,
 	queries *dbq.Queries,
 	sourceBucket, mediaBucket, hmacSecret string,
+	coordinators ...lifecycle.HashCoordinator,
 ) *ImageHandler {
-	return &ImageHandler{
+	handler := &ImageHandler{
 		sourceStore:  sourceStore,
 		mediaStore:   mediaStore,
 		cache:        lru,
@@ -63,6 +68,10 @@ func NewImageHandler(
 		mediaBucket:  mediaBucket,
 		hmacSecret:   hmacSecret,
 	}
+	if len(coordinators) > 0 {
+		handler.coordinator = coordinators[0]
+	}
+	return handler
 }
 
 // Handle processes an image request.
@@ -114,12 +123,44 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid signature")
 	}
 
+	hash, ok := lifecycle.ExtractHash(sourceKey)
+	if !ok {
+		return echo.NewHTTPError(http.StatusUnprocessableEntity, "source path does not contain an attributable content hash")
+	}
+	if h.coordinator == nil {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "image lifecycle coordinator is unavailable")
+	}
+
+	return h.coordinator.WithHashLock(c.Request().Context(), hash, func(queries *dbq.Queries) error {
+		if err := lifecycle.RejectTombstoned(c.Request().Context(), queries, hash, sourceKey); err != nil {
+			if errors.Is(err, lifecycle.ErrTombstoned) {
+				return echo.NewHTTPError(http.StatusGone, "source image was permanently deleted").Wrap(err)
+			}
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "image lifecycle lookup failed").Wrap(err)
+		}
+
+		return h.handleLocked(c, queries, hash, sourceKey, optsRaw, opts)
+	})
+}
+
+func (h *ImageHandler) handleLocked(
+	c *echo.Context,
+	queries *dbq.Queries,
+	hash string,
+	sourceKey string,
+	optsRaw string,
+	opts image.Options,
+) error {
 	// ── 3. Cache lookup ──
-	cacheKey := processingHash(sourceKey, opts)
+	processingKey := processingHash(sourceKey, opts)
+	cacheKey := lifecycle.CacheMemoryKey(hash, processingKey)
+	storageCacheKey := lifecycle.CacheStorageKey(hash, processingKey, opts.Format.Ext())
 
 	// 3a. Memory LRU
 	if data, ok := h.cache.Get(cacheKey); ok {
-		h.trackCacheEntry(c.Request().Context(), sourceKey, cacheKey, s3CacheKey(format, cacheKey))
+		if err := h.trackCacheEntry(c.Request().Context(), queries, hash, cacheKey, storageCacheKey); err != nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "cache index unavailable").Wrap(err)
+		}
 		appmetrics.ObserveImageCache("memory", "hit")
 		appmetrics.ObserveImageResult("memory_hit")
 		return h.sendImage(c, data, opts.Format)
@@ -127,9 +168,10 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 	appmetrics.ObserveImageCache("memory", "miss")
 
 	// 3b. S3 cache
-	storageCacheKey := s3CacheKey(format, cacheKey)
 	if data, err := h.fetchFromStorage(c.Request().Context(), h.mediaStore, h.mediaBucket, storageCacheKey); err == nil {
-		h.trackCacheEntry(c.Request().Context(), sourceKey, cacheKey, storageCacheKey)
+		if err := h.trackCacheEntry(c.Request().Context(), queries, hash, cacheKey, storageCacheKey); err != nil {
+			return echo.NewHTTPError(http.StatusServiceUnavailable, "cache index unavailable").Wrap(err)
+		}
 		appmetrics.ObserveImageCache("storage", "hit")
 		appmetrics.ObserveImageResult("storage_hit")
 		// Populate LRU for subsequent in-instance hits.
@@ -140,7 +182,8 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 
 	// ── 4. Fetch original (singleflight) ──
 	rawVal, err, _ := h.sourceFlight.Do(sourceKey, func() (any, error) {
-		fetchCtx := apptracing.BackgroundContext(c.Request().Context())
+		fetchCtx, cancel := context.WithTimeout(c.Request().Context(), imageSourceFetchTimeout)
+		defer cancel()
 		fetchCtx, span := apptracing.Tracer("vylux/image").Start(fetchCtx, "image.fetch.original",
 			trace.WithAttributes(
 				attribute.String("storage.role", "source"),
@@ -173,7 +216,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 	raw := rawVal.([]byte)
 
 	// ── 5. Process image (singleflight) ──
-	resultVal, err, _ := h.processFlight.Do(cacheKey, func() (any, error) {
+	resultVal, err, _ := h.processFlight.Do(processingKey, func() (any, error) {
 		processCtx, span := apptracing.Tracer("vylux/image").Start(c.Request().Context(), "image.process",
 			trace.WithAttributes(
 				attribute.String("image.format", opts.Format.Ext()),
@@ -210,18 +253,20 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 	result := resultVal.([]byte)
 
 	// ── 6. Write caches ──
-	// Synchronous: memory LRU
+	if err := h.mediaStore.Put(
+		c.Request().Context(),
+		h.mediaBucket,
+		storageCacheKey,
+		bytes.NewReader(result),
+		opts.Format.String(),
+	); err != nil {
+		return echo.NewHTTPError(http.StatusBadGateway, "cache storage write failed").Wrap(err)
+	}
+	if err := h.trackCacheEntry(c.Request().Context(), queries, hash, cacheKey, storageCacheKey); err != nil {
+		deleteErr := h.mediaStore.Delete(c.Request().Context(), h.mediaBucket, storageCacheKey)
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "cache index write failed").Wrap(errors.Join(err, deleteErr))
+	}
 	h.cache.Set(cacheKey, result)
-	h.trackCacheEntry(c.Request().Context(), sourceKey, cacheKey, storageCacheKey)
-
-	// Asynchronous: S3 write-back
-	go func() {
-		ct := opts.Format.String()
-		writeCtx := apptracing.BackgroundContext(c.Request().Context())
-		if putErr := h.mediaStore.Put(writeCtx, h.mediaBucket, storageCacheKey, bytes.NewReader(result), ct); putErr != nil {
-			slog.Warn("S3 cache write-back failed", apptracing.LogFields(writeCtx, "key", storageCacheKey, "error", putErr)...)
-		}
-	}()
 
 	// ── 7. Respond ──
 	appmetrics.ObserveImageResult("processed")
@@ -265,37 +310,18 @@ func processingHash(source string, opts image.Options) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func s3CacheKey(format image.Format, cacheKey string) string {
-	return "cache/" + cacheKey + "." + format.Ext()
-}
-
-var contentHashPattern = regexp.MustCompile(`(?i)^(?:sha256:)?([a-f0-9]{64})$`)
-
-func extractContentHash(source string) string {
-	for segment := range strings.SplitSeq(source, "/") {
-		match := contentHashPattern.FindStringSubmatch(segment)
-		if len(match) == 2 {
-			return strings.ToLower(match[1])
-		}
+func (h *ImageHandler) trackCacheEntry(ctx context.Context, queries *dbq.Queries, hash, cacheKey, storageKey string) error {
+	if queries == nil {
+		return fmt.Errorf("cache index database is unavailable")
 	}
-	return ""
-}
-
-func (h *ImageHandler) trackCacheEntry(ctx context.Context, sourceKey, cacheKey, storageKey string) {
-	if h.queries == nil {
-		return
-	}
-	hash := extractContentHash(sourceKey)
-	if hash == "" {
-		return
-	}
-	if err := h.queries.UpsertImageCacheEntry(ctx, dbq.UpsertImageCacheEntryParams{
+	if err := queries.UpsertImageCacheEntry(ctx, dbq.UpsertImageCacheEntryParams{
 		Hash:       hash,
 		CacheKey:   cacheKey,
 		StorageKey: storageKey,
 	}); err != nil {
-		slog.Warn("track image cache entry failed", apptracing.LogFields(ctx, "hash", hash, "storage_key", storageKey, "error", err)...)
+		return fmt.Errorf("track image cache entry: %w", err)
 	}
+	return nil
 }
 
 // shortHash returns the first 16 hex chars of a SHA-256 over data (for ETags).

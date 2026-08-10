@@ -37,3 +37,6 @@ SELECT * FROM jobs WHERE retry_of_job_id = $1 ORDER BY created_at;
 
 -- name: DeleteJobsByHash :exec
 DELETE FROM jobs WHERE hash = $1;
+
+-- name: DeleteJob :exec
+DELETE FROM jobs WHERE id = $1;

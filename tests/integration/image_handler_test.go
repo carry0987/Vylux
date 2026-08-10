@@ -11,13 +11,14 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"Vylux/internal/cache"
 	"Vylux/internal/config"
 	"Vylux/internal/db"
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/deployment"
 	"Vylux/internal/encryption"
+	"Vylux/internal/lifecycle"
 	"Vylux/internal/queue"
 	"Vylux/internal/server"
 	"Vylux/internal/signature"
@@ -28,7 +29,12 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
-func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Config, storage.Storage, *dbq.Queries, *cache.LRU, func()) {
+type testServerOptions struct {
+	sourceStoreDecorator func(storage.Storage) storage.Storage
+	mediaStoreDecorator  func(storage.Storage) storage.Storage
+}
+
+func newS3BackedTestServerWithOptions(t *testing.T, options testServerOptions) (*httptest.Server, *config.Config, storage.Storage, *dbq.Queries, *cache.LRU, *db.Pool, func()) {
 	t.Helper()
 
 	if testing.Short() {
@@ -64,8 +70,26 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		t.Fatalf("new s3 store: %v", err)
 	}
 
+	sourceStore := storage.WithInstrumentation(store, "source", "s3")
+	mediaStore := storage.WithInstrumentation(store, "media", "s3")
+	if options.sourceStoreDecorator != nil {
+		sourceStore = options.sourceStoreDecorator(sourceStore)
+	}
+	if options.mediaStoreDecorator != nil {
+		mediaStore = options.mediaStoreDecorator(mediaStore)
+	}
+
 	queries := dbq.New(pool)
+	lifecycleCoordinator := lifecycle.NewCoordinator(pool)
 	lru := cache.New(64 * 1024 * 1024)
+	lifecycleCoordinator.ConfigureStrictCleanupReadiness(mediaStore, "media")
+	if _, err := pool.Exec(ctx, `
+		UPDATE media_lifecycle_readiness
+		SET cache_audit_armed = TRUE, updated_at = now()
+		WHERE singleton = TRUE
+	`); err != nil {
+		t.Fatalf("arm strict cleanup readiness: %v", err)
+	}
 
 	queueClient, err := queue.NewClient(rd.URL)
 	if err != nil {
@@ -78,6 +102,9 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 	}
 
 	cfg := &config.Config{
+		DeploymentID:       "550e8400-e29b-41d4-a716-446655440001",
+		SourceProviderKind: "s3",
+		MediaProviderKind:  "s3",
 		Port:               3000,
 		Mode:               "server",
 		BaseURL:            "http://localhost:3000",
@@ -102,6 +129,15 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		CacheMaxSize:       64 * 1024 * 1024,
 	}
 
+	expectedTarget, err := cfg.DeploymentTarget()
+	if err != nil {
+		t.Fatalf("build deployment target: %v", err)
+	}
+	target, err := deployment.BindTarget(ctx, queries, expectedTarget)
+	if err != nil {
+		t.Fatalf("bind deployment target: %v", err)
+	}
+
 	keyWrapper, err := encryption.NewKeyWrapper(cfg.EncryptionKey)
 	if err != nil {
 		t.Fatalf("key wrapper: %v", err)
@@ -114,11 +150,12 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 	redisClient := redis.NewClient(redisOpt)
 
 	deps := &server.Deps{
-		SourceStore: storage.WithInstrumentation(store, "source", "s3"),
-		MediaStore:  storage.WithInstrumentation(store, "media", "s3"),
+		SourceStore: sourceStore,
+		MediaStore:  mediaStore,
 		Cache:       lru,
 		QueueClient: queueClient,
 		DBQueries:   queries,
+		Lifecycle:   lifecycleCoordinator,
 		Inspector:   inspector,
 		Redis:       redisClient,
 		KeyWrapper:  keyWrapper,
@@ -126,6 +163,7 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		RedisPing: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
 		},
+		Target: target,
 	}
 
 	ts := httptest.NewServer(server.New(cfg, deps).Handler())
@@ -138,6 +176,11 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		pool.Close()
 	}
 
+	return ts, cfg, store, queries, lru, pool, cleanup
+}
+
+func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Config, storage.Storage, *dbq.Queries, *cache.LRU, func()) {
+	ts, cfg, store, queries, lru, _, cleanup := newS3BackedTestServerWithOptions(t, testServerOptions{})
 	return ts, cfg, store, queries, lru, cleanup
 }
 
@@ -168,7 +211,8 @@ func TestImageHandler_WithS3CompatibleStorage(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	sourceKey := "sample image.png"
+	hash := strings.Repeat("a", 64)
+	sourceKey := "uploads/aa/" + hash + "-upload-id.png"
 	if err := store.Put(ctx, cfg.SourceBucket, sourceKey, bytes.NewReader(buildTestPNG(t)), "image/png"); err != nil {
 		t.Fatalf("upload source fixture: %v", err)
 	}
@@ -192,19 +236,12 @@ func TestImageHandler_WithS3CompatibleStorage(t *testing.T) {
 		t.Fatalf("expected image/webp content type, got %q", got)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		keys, listErr := store.List(ctx, cfg.MediaBucket, "cache/")
-		if listErr == nil && len(keys) > 0 {
-			return
-		}
-		if time.Now().After(deadline) {
-			if listErr != nil {
-				t.Fatalf("list cache objects: %v", listErr)
-			}
-			t.Fatal("expected cached object to be written to media bucket")
-		}
-		time.Sleep(100 * time.Millisecond)
+	keys, listErr := store.List(ctx, cfg.MediaBucket, lifecycle.CacheNamespace(hash))
+	if listErr != nil {
+		t.Fatalf("list cache objects: %v", listErr)
+	}
+	if len(keys) != 1 || !lifecycle.IsNamespacedCacheKey(keys[0]) {
+		t.Fatalf("expected one hash-namespaced cache object, got %v", keys)
 	}
 }
 
@@ -212,7 +249,8 @@ func TestImageHandler_SourceNotFoundReturns404(t *testing.T) {
 	ts, cfg, _, cleanup := newS3BackedTestServer(t)
 	defer cleanup()
 
-	requestSource := strings.ReplaceAll(url.PathEscape("missing-image.png"), "+", "%20") + ".webp"
+	sourceKey := "uploads/bb/" + strings.Repeat("b", 64) + ".png"
+	requestSource := strings.ReplaceAll(url.PathEscape(sourceKey), "+", "%20") + ".webp"
 	sig, err := signature.SignImage(cfg.HMACSecret, "w64", requestSource)
 	if err != nil {
 		t.Fatalf("sign image URL: %v", err)
@@ -237,7 +275,8 @@ func TestImageHandler_CorruptSourceReturns422(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.Background()
-	sourceKey := "corrupt-image.png"
+	hash := strings.Repeat("c", 64)
+	sourceKey := "uploads/cc/" + hash + "-upload-id.png"
 	if err := store.Put(ctx, cfg.SourceBucket, sourceKey, bytes.NewReader([]byte("not-a-valid-image")), "image/png"); err != nil {
 		t.Fatalf("upload corrupt fixture: %v", err)
 	}
@@ -259,6 +298,27 @@ func TestImageHandler_CorruptSourceReturns422(t *testing.T) {
 	}
 	if resp.Header.Get("X-Fallback") != "" {
 		t.Fatal("expected no fallback header on error response")
+	}
+}
+
+func TestImageHandler_UnattributableSourcePathReturns422(t *testing.T) {
+	ts, cfg, _, cleanup := newS3BackedTestServer(t)
+	defer cleanup()
+
+	requestSource := strings.ReplaceAll(url.PathEscape("legacy/unindexed-image.png"), "+", "%20") + ".webp"
+	sig, err := signature.SignImage(cfg.HMACSecret, "w64", requestSource)
+	if err != nil {
+		t.Fatalf("sign image URL: %v", err)
+	}
+
+	resp, err := http.Get(ts.URL + "/img/" + sig + "/w64/" + requestSource)
+	if err != nil {
+		t.Fatalf("GET /img: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", resp.StatusCode)
 	}
 }
 
