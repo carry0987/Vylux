@@ -16,8 +16,9 @@ import (
 )
 
 type fakeStore struct {
-	objects map[string][]byte
-	deleted []string
+	objects    map[string][]byte
+	deleted    []string
+	failDelete map[string]bool
 }
 
 func (s *fakeStore) Get(_ context.Context, _, key string) (io.ReadCloser, error) {
@@ -55,6 +56,9 @@ func (s *fakeStore) Size(_ context.Context, _, key string) (int64, error) {
 }
 
 func (s *fakeStore) Delete(_ context.Context, _, key string) error {
+	if s.failDelete[key] {
+		return errors.New("storage unavailable")
+	}
 	delete(s.objects, key)
 	s.deleted = append(s.deleted, key)
 	return nil
@@ -191,7 +195,9 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	}}
 
 	cleaner := NewCleaner(store, lru, queries, inspector, "media")
-	cleaner.Cleanup(ctx, hash)
+	if err := cleaner.Cleanup(ctx, hash); err != nil {
+		t.Fatalf("expected complete cleanup to report success, got %v", err)
+	}
 
 	if _, ok := lru.Get(trackedCacheKey); ok {
 		t.Fatal("expected tracked LRU entry to be removed")
@@ -219,5 +225,34 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	}
 	if _, err := inspector.GetTaskInfo(queue.QueueDefault, "active-task"); !errors.Is(err, asynq.ErrTaskNotFound) {
 		t.Fatalf("expected active task to be deleted after cancellation, got %v", err)
+	}
+}
+
+func TestCleanerCleanupReportsObjectsItCouldNotDelete(t *testing.T) {
+	ctx := context.Background()
+	hash := strings.Repeat("b", 64)
+	stuckKey := s3PrefixForHash(hash, "images") + "thumb.webp"
+
+	store := &fakeStore{
+		objects:    map[string][]byte{stuckKey: []byte("img")},
+		failDelete: map[string]bool{stuckKey: true},
+	}
+	queries := &fakeQueries{}
+
+	cleaner := NewCleaner(store, nil, queries, nil, "media")
+	err := cleaner.Cleanup(ctx, hash)
+	if err == nil {
+		t.Fatal("expected cleanup to report the object it could not delete")
+	}
+	if !strings.Contains(err.Error(), stuckKey) {
+		t.Fatalf("expected the failing key in the error, got %v", err)
+	}
+
+	// The remaining steps still run, so retrying can finish what is left.
+	if queries.deletedKeysHash != hash {
+		t.Fatalf("expected encryption key delete to still run, got %q", queries.deletedKeysHash)
+	}
+	if queries.deletedJobsHash != hash {
+		t.Fatalf("expected jobs delete to still run, got %q", queries.deletedJobsHash)
 	}
 }

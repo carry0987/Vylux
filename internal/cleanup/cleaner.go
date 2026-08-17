@@ -3,6 +3,7 @@ package cleanup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"time"
@@ -54,33 +55,48 @@ func NewCleaner(store storage.Storage, lru *cache.LRU, queries queries, inspecto
 	}
 }
 
-func (c *Cleaner) Cleanup(ctx context.Context, hash string) {
+// Cleanup removes every resource associated with a content hash. Each step is
+// still attempted even when an earlier one fails, so a retry can make progress;
+// the returned error reports whatever did not complete, so a caller can tell
+// whether the media is really gone before it forgets the hash.
+func (c *Cleaner) Cleanup(ctx context.Context, hash string) error {
 	slog.Info("cleanup started", apptracing.LogFields(ctx, "hash", hash)...)
 
-	c.cancelTasks(ctx, hash)
-	c.deleteMediaObjects(ctx, hash)
-	c.deleteTrackedImageCaches(ctx, hash)
-	c.deleteEncryptionKey(ctx, hash)
-	c.deleteJobs(ctx, hash)
+	err := errors.Join(
+		c.cancelTasks(ctx, hash),
+		c.deleteMediaObjects(ctx, hash),
+		c.deleteTrackedImageCaches(ctx, hash),
+		c.deleteEncryptionKey(ctx, hash),
+		c.deleteJobs(ctx, hash),
+	)
+	if err != nil {
+		slog.Warn("cleanup incomplete", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
+		return err
+	}
 
 	slog.Info("cleanup completed", apptracing.LogFields(ctx, "hash", hash)...)
+
+	return nil
 }
 
-func (c *Cleaner) cancelTasks(ctx context.Context, hash string) {
+func (c *Cleaner) cancelTasks(ctx context.Context, hash string) error {
 	jobs, err := c.queries.ListJobsByHash(ctx, hash)
 	if err != nil {
 		slog.Warn("cleanup: list jobs for cancel failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
-		return
+		return fmt.Errorf("list jobs for cancel: %w", err)
 	}
 
 	queues := c.queueNames(ctx)
+	var errs []error
 	for i := range jobs {
 		job := &jobs[i]
 		if job.Status == "completed" || job.Status == "canceled" {
 			continue
 		}
-		c.cancelTask(ctx, job.ID, queues)
+		errs = append(errs, c.cancelTask(ctx, job.ID, queues))
 	}
+
+	return errors.Join(errs...)
 }
 
 func (c *Cleaner) queueNames(ctx context.Context) []string {
@@ -105,9 +121,9 @@ func (c *Cleaner) queueNames(ctx context.Context) []string {
 	return queues
 }
 
-func (c *Cleaner) cancelTask(ctx context.Context, taskID string, queues []string) {
+func (c *Cleaner) cancelTask(ctx context.Context, taskID string, queues []string) error {
 	if c.inspector == nil {
-		return
+		return nil
 	}
 
 	for attempt := range cancelAttempts {
@@ -135,27 +151,34 @@ func (c *Cleaner) cancelTask(ctx context.Context, taskID string, queues []string
 		}
 
 		if !found || deleted {
-			return
+			return nil
 		}
 
 		time.Sleep(cancelBackoff)
 	}
 
 	slog.Warn("cleanup: task still present after cancellation attempts", apptracing.LogFields(ctx, "task_id", taskID)...)
+
+	// A task that is still queued can write new artifacts after the sweep, so
+	// this is reported rather than swallowed.
+	return fmt.Errorf("task %s still present after %d cancellation attempts", taskID, cancelAttempts)
 }
 
-func (c *Cleaner) deleteMediaObjects(ctx context.Context, hash string) {
-	c.deletePrefix(ctx, s3PrefixForHash(hash, "images"))
-	c.deletePrefix(ctx, s3PrefixForHash(hash, "videos"))
+func (c *Cleaner) deleteMediaObjects(ctx context.Context, hash string) error {
+	return errors.Join(
+		c.deletePrefix(ctx, s3PrefixForHash(hash, "images")),
+		c.deletePrefix(ctx, s3PrefixForHash(hash, "videos")),
+	)
 }
 
-func (c *Cleaner) deleteTrackedImageCaches(ctx context.Context, hash string) {
+func (c *Cleaner) deleteTrackedImageCaches(ctx context.Context, hash string) error {
 	entries, err := c.queries.ListImageCacheEntriesByHash(ctx, hash)
 	if err != nil {
 		slog.Warn("cleanup: list image cache entries failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
-		return
+		return fmt.Errorf("list image cache entries: %w", err)
 	}
 
+	var errs []error
 	for _, entry := range entries {
 		if c.cache != nil {
 			c.cache.Delete(entry.CacheKey)
@@ -165,38 +188,52 @@ func (c *Cleaner) deleteTrackedImageCaches(ctx context.Context, hash string) {
 		}
 		if err := c.store.Delete(ctx, c.mediaBucket, entry.StorageKey); err != nil {
 			slog.Warn("cleanup: delete tracked cache object failed", apptracing.LogFields(ctx, "hash", hash, "key", entry.StorageKey, "error", err)...)
+			errs = append(errs, fmt.Errorf("delete tracked cache object %q: %w", entry.StorageKey, err))
 		}
 	}
 
 	if err := c.queries.DeleteImageCacheEntriesByHash(ctx, hash); err != nil {
 		slog.Warn("cleanup: delete image cache index failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
+		errs = append(errs, fmt.Errorf("delete image cache index: %w", err))
 	}
+
+	return errors.Join(errs...)
 }
 
-func (c *Cleaner) deleteEncryptionKey(ctx context.Context, hash string) {
+func (c *Cleaner) deleteEncryptionKey(ctx context.Context, hash string) error {
 	if err := c.queries.DeleteEncryptionKey(ctx, hash); err != nil {
 		slog.Warn("cleanup: delete encryption key failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
+		return fmt.Errorf("delete encryption key: %w", err)
 	}
+
+	return nil
 }
 
-func (c *Cleaner) deleteJobs(ctx context.Context, hash string) {
+func (c *Cleaner) deleteJobs(ctx context.Context, hash string) error {
 	if err := c.queries.DeleteJobsByHash(ctx, hash); err != nil {
 		slog.Warn("cleanup: delete jobs failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
+		return fmt.Errorf("delete jobs: %w", err)
 	}
+
+	return nil
 }
 
-func (c *Cleaner) deletePrefix(ctx context.Context, prefix string) {
+func (c *Cleaner) deletePrefix(ctx context.Context, prefix string) error {
 	keys, err := c.store.List(ctx, c.mediaBucket, prefix)
 	if err != nil {
 		slog.Warn("cleanup: list storage objects failed", apptracing.LogFields(ctx, "prefix", prefix, "error", err)...)
-		return
+		return fmt.Errorf("list storage objects %q: %w", prefix, err)
 	}
 
+	var errs []error
 	for _, key := range keys {
 		if err := c.store.Delete(ctx, c.mediaBucket, key); err != nil {
 			slog.Warn("cleanup: delete storage object failed", apptracing.LogFields(ctx, "key", key, "error", err)...)
+			errs = append(errs, fmt.Errorf("delete storage object %q: %w", key, err))
 		}
 	}
+
+	return errors.Join(errs...)
 }
 
 func s3PrefixForHash(hash, kind string) string {

@@ -14,13 +14,15 @@ import (
 
 // CleanupHandler handles DELETE /api/media/:hash.
 //
-// It performs best-effort cleanup of all resources associated with a content hash:
+// It cleans up all resources associated with a content hash:
 //   - Cancel in-flight asynq tasks
 //   - Delete S3 derived files (images + videos)
 //   - Delete encryption key (DB)
 //   - Delete job records (DB)
 //
-// Always returns 204 No Content (idempotent).
+// Returns 204 No Content once every resource is gone, and 500 when any of them
+// could not be removed. Cleanup is idempotent, so a caller can retry a failure
+// until it succeeds.
 type CleanupHandler struct {
 	cleaner *appcleanup.Cleaner
 }
@@ -45,7 +47,9 @@ func (h *CleanupHandler) Handle(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing hash")
 	}
 
-	h.cleaner.Cleanup(c.Request().Context(), hash)
+	if err := h.cleaner.Cleanup(c.Request().Context(), hash); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "media cleanup incomplete")
+	}
 
 	return c.NoContent(http.StatusNoContent)
 }
