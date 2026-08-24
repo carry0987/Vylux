@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0](https://github.com/carry0987/Vylux/compare/v1.2.1...v2.0.0) (2026-08-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cleanup:** `DELETE /api/media/:hash` no longer always returns `204 No Content`. It now returns `503 Service Unavailable` when cleanup cannot be confirmed and the caller should retry.
+* add audio processing and split media job creation routes ([#31](https://github.com/carry0987/Vylux/issues/31))
+
+### Features
+
+* add audio processing and split media job creation routes ([#31](https://github.com/carry0987/Vylux/issues/31)) ([827c849](https://github.com/carry0987/Vylux/commit/827c84999b47809c41d68638c4b93e8106e7f281))
+
+
+### Bug Fixes
+
+* **cleanup:** return retryable failures for incomplete cleanup ([#33](https://github.com/carry0987/Vylux/issues/33)) ([08fa114](https://github.com/carry0987/Vylux/commit/08fa114964e1939afe8878b6d23adb55a5a2d38a))
+
 ## [1.2.1](https://github.com/carry0987/Vylux/compare/v1.2.0...v1.2.1) (2026-07-23)
 
 
