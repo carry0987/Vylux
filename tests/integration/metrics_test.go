@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"Vylux/internal/handler"
 	"Vylux/internal/signature"
 )
 
@@ -42,26 +41,34 @@ func TestMetricsEndpoint_ExposesPrometheusMetrics(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	jobBody, err := json.Marshal(handler.JobRequest{
-		Type:        "image:thumbnail",
-		Hash:        "metrics-job-hash",
-		Source:      sourceKey,
-		CallbackURL: "http://example.com/callback",
+	jobBody, err := json.Marshal(map[string]any{
+		"source": map[string]any{
+			"hash": "metrics-job-hash",
+			"key":  sourceKey,
+		},
+		"pipeline": map[string]any{
+			"package": map[string]any{
+				"hls": map[string]any{"enabled": true, "profile": "stream_aac_standard"},
+			},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
+		},
 	})
 	if err != nil {
 		t.Fatalf("marshal job body: %v", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/jobs", bytes.NewReader(jobBody))
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/audio/jobs", bytes.NewReader(jobBody))
 	if err != nil {
-		t.Fatalf("new POST /api/jobs request: %v", err)
+		t.Fatalf("new POST /api/audio/jobs request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", cfg.APIKey)
 
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("POST /api/jobs: %v", err)
+		t.Fatalf("POST /api/audio/jobs: %v", err)
 	}
 	resp.Body.Close()
 
@@ -85,15 +92,14 @@ func TestMetricsEndpoint_ExposesPrometheusMetrics(t *testing.T) {
 		"vylux_http_requests_total",
 		"vylux_http_request_duration_seconds",
 		"vylux_image_cache_events_total",
-		"vylux_image_errors_total",
 		"vylux_image_results_total",
 		"vylux_queue_tasks",
 		"route=\"/healthz\"",
 		"route=\"/img/:sig/:opts/*\"",
-		"route=\"/api/jobs\"",
+		"route=\"/api/audio/jobs\"",
 		"layer=\"memory\",result=\"miss\"",
 		"layer=\"storage\",result=\"miss\"",
-		"queue=\"critical\",state=\"pending\"",
+		"queue=\"default\",state=\"pending\"",
 	}
 
 	for _, want := range checks {

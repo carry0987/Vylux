@@ -12,6 +12,7 @@ import (
 // Task type constants — must match the design doc.
 const (
 	TypeImageThumbnail = "image:thumbnail"
+	TypeAudioTranscode = "audio:transcode"
 	TypeVideoCover     = "video:cover"
 	TypeVideoPreview   = "video:preview"
 	TypeVideoTranscode = "video:transcode"
@@ -61,6 +62,16 @@ type VideoTranscodeOptions struct {
 	Encrypt bool `json:"encrypt,omitempty"`
 }
 
+// AudioTranscodeOptions describes configurable audio packaging outputs.
+type AudioTranscodeOptions struct {
+	HLS          bool   `json:"hls,omitempty"`
+	MP3          bool   `json:"mp3,omitempty"`
+	FLAC         bool   `json:"flac,omitempty"`
+	Waveform     bool   `json:"waveform,omitempty"`
+	WaveformBins int    `json:"waveform_bins,omitempty"`
+	MP3Bitrate   string `json:"mp3_bitrate,omitempty"`
+}
+
 // VideoFullOptions groups the per-stage options for video:full jobs.
 type VideoFullOptions struct {
 	Cover     *VideoCoverOptions     `json:"cover,omitempty"`
@@ -99,6 +110,20 @@ type VideoTranscodePayload struct {
 	CallbackURL string `json:"callback_url"`
 }
 
+// AudioTranscodePayload is the payload for audio:transcode tasks.
+type AudioTranscodePayload struct {
+	apptracing.TraceCarrier
+	Hash         string `json:"hash"`
+	Source       string `json:"source"`
+	HLS          bool   `json:"hls,omitempty"`
+	MP3          bool   `json:"mp3,omitempty"`
+	FLAC         bool   `json:"flac,omitempty"`
+	Waveform     bool   `json:"waveform,omitempty"`
+	WaveformBins int    `json:"waveform_bins,omitempty"`
+	MP3Bitrate   string `json:"mp3_bitrate,omitempty"`
+	CallbackURL  string `json:"callback_url"`
+}
+
 // VideoFullPayload is the payload for video:full tasks.
 // The handler executes cover, preview, and transcode as one workflow task.
 type VideoFullPayload struct {
@@ -119,6 +144,16 @@ func NewImageThumbnailTask(p *ImageThumbnailPayload) (*asynq.Task, error) {
 	}
 
 	return asynq.NewTask(TypeImageThumbnail, data), nil
+}
+
+// NewAudioTranscodeTask creates an audio:transcode task.
+func NewAudioTranscodeTask(p *AudioTranscodePayload) (*asynq.Task, error) {
+	data, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("marshal audio:transcode payload: %w", err)
+	}
+
+	return asynq.NewTask(TypeAudioTranscode, data), nil
 }
 
 // NewVideoCoverTask creates a video:cover task.

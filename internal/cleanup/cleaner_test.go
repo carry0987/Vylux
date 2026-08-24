@@ -172,8 +172,9 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	lru.Set(trackedCacheKey, []byte("cached"))
 
 	store := &fakeStore{objects: map[string][]byte{
-		s3PrefixForHash(hash, "images") + "thumb.webp":  []byte("img"),
-		s3PrefixForHash(hash, "videos") + "master.m3u8": []byte("playlist"),
+		s3PrefixForHash(hash, "images") + "thumb.webp":         []byte("img"),
+		s3PrefixForHash(hash, "videos") + "master.m3u8":        []byte("playlist"),
+		s3PrefixForHash(hash, "audio") + "downloads/audio.mp3": []byte("audio"),
 		trackedStorageKey: []byte("sync-cache"),
 	}}
 	queries := &fakeQueries{
@@ -204,6 +205,9 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	}
 	if exists, _ := store.Exists(ctx, "media", s3PrefixForHash(hash, "videos")+"master.m3u8"); exists {
 		t.Fatal("expected derived video asset to be removed")
+	}
+	if exists, _ := store.Exists(ctx, "media", s3PrefixForHash(hash, "audio")+"downloads/audio.mp3"); exists {
+		t.Fatal("expected derived audio asset to be removed")
 	}
 	if queries.deletedJobsHash != hash {
 		t.Fatalf("expected jobs delete for %q, got %q", hash, queries.deletedJobsHash)

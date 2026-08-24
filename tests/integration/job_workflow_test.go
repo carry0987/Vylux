@@ -52,8 +52,8 @@ func TestHealthEndpoints(t *testing.T) {
 	}
 }
 
-// TestJobCreate_Unauthorized verifies that creating a job without API key returns 401.
-func TestJobCreate_Unauthorized(t *testing.T) {
+// TestAudioJobCreate_Unauthorized verifies that audio job creation requires authentication.
+func TestAudioJobCreate_Unauthorized(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
@@ -61,10 +61,10 @@ func TestJobCreate_Unauthorized(t *testing.T) {
 	ts, _, cleanup := newTestServer(t)
 	defer cleanup()
 
-	body := `{"type":"image:thumbnail","hash":"abc123","source":"test.jpg","callback_url":"http://example.com/cb"}`
-	resp, err := http.Post(ts.URL+"/api/jobs", "application/json", bytes.NewBufferString(body))
+	body := `{"source":{"hash":"abc123","key":"uploads/audio.flac"}}`
+	resp, err := http.Post(ts.URL+"/api/audio/jobs", "application/json", bytes.NewBufferString(body))
 	if err != nil {
-		t.Fatalf("POST /api/jobs: %v", err)
+		t.Fatalf("POST /api/audio/jobs: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -73,30 +73,41 @@ func TestJobCreate_Unauthorized(t *testing.T) {
 	}
 }
 
-// TestJobCreate_Success verifies that creating a job with a valid API key succeeds.
-func TestJobCreate_Success(t *testing.T) {
+// TestVideoJobCreate_Success verifies that video job creation succeeds on the domain route.
+func TestVideoJobCreate_Success(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, cfg, cleanup := newTestServer(t)
+	ts, cfg, store, cleanup := newTestServerWithStore(t)
 	defer cleanup()
+	if err := store.Put(t.Context(), cfg.SourceBucket, "uploads/test.mp4", bytes.NewReader([]byte("video")), "video/mp4"); err != nil {
+		t.Fatalf("upload source fixture: %v", err)
+	}
 
-	body := handler.JobRequest{
-		Type:        "image:thumbnail",
-		Hash:        "abc123def456",
-		Source:      "uploads/test.jpg",
-		CallbackURL: "http://example.com/callback",
+	body := map[string]any{
+		"source": map[string]any{
+			"hash": "abc123def456",
+			"key":  "uploads/test.mp4",
+		},
+		"pipeline": map[string]any{
+			"package": map[string]any{
+				"hls": map[string]any{"enabled": true, "profile": "stream_video_standard"},
+			},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
+		},
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/jobs", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/video/jobs", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", cfg.APIKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("POST /api/jobs: %v", err)
+		t.Fatalf("POST /api/video/jobs: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -110,8 +121,8 @@ func TestJobCreate_Success(t *testing.T) {
 		t.Fatalf("decode response: %v", err)
 	}
 
-	if result.Hash != body.Hash {
-		t.Errorf("expected hash %q, got %q", body.Hash, result.Hash)
+	if result.Hash != "abc123def456" {
+		t.Errorf("expected hash %q, got %q", "abc123def456", result.Hash)
 	}
 
 	if result.Status != "queued" && result.Status != "completed" {
@@ -119,24 +130,35 @@ func TestJobCreate_Success(t *testing.T) {
 	}
 }
 
-// TestJobGetStatus verifies GET /api/jobs/:id returns job details.
+// TestJobGetStatus verifies the shared GET /api/jobs/:id lifecycle endpoint returns job details.
 func TestJobGetStatus(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, cfg, cleanup := newTestServer(t)
+	ts, cfg, store, cleanup := newTestServerWithStore(t)
 	defer cleanup()
+	if err := store.Put(t.Context(), cfg.SourceBucket, "uploads/status.mp4", bytes.NewReader([]byte("video")), "video/mp4"); err != nil {
+		t.Fatalf("upload source fixture: %v", err)
+	}
 
-	body := handler.JobRequest{
-		Type:        "image:thumbnail",
-		Hash:        "status-test-hash",
-		Source:      "uploads/test.jpg",
-		CallbackURL: "http://example.com/callback",
+	body := map[string]any{
+		"source": map[string]any{
+			"hash": "status-test-hash",
+			"key":  "uploads/status.mp4",
+		},
+		"pipeline": map[string]any{
+			"package": map[string]any{
+				"hls": map[string]any{"enabled": true, "profile": "stream_video_standard"},
+			},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
+		},
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/jobs", bytes.NewReader(jsonBody))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/video/jobs", bytes.NewReader(jsonBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", cfg.APIKey)
 
@@ -173,7 +195,7 @@ func TestJobGetStatus(t *testing.T) {
 		t.Fatalf("decode status response: %v", err)
 	}
 
-	if statusResult.Hash != body.Hash {
-		t.Errorf("expected hash %q, got %q", body.Hash, statusResult.Hash)
+	if statusResult.Hash != "status-test-hash" {
+		t.Errorf("expected hash %q, got %q", "status-test-hash", statusResult.Hash)
 	}
 }

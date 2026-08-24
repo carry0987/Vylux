@@ -113,18 +113,16 @@ func StartRustFS(ctx context.Context, t *testing.T) *RustFSContainer {
 	)
 
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "rustfs/rustfs:latest",
-			ExposedPorts: []string{"9000/tcp"},
-			Env: map[string]string{
-				"RUSTFS_ACCESS_KEY": accessKey,
-				"RUSTFS_SECRET_KEY": secretKey,
-			},
-			WaitingFor: wait.ForHTTP("/health").
-				WithPort("9000/tcp").
-				WithStatusCodeMatcher(func(status int) bool { return status == http.StatusOK }).
-				WithStartupTimeout(45 * time.Second),
+		Image:        "rustfs/rustfs:latest",
+		ExposedPorts: []string{"9000/tcp"},
+		Env: map[string]string{
+			"RUSTFS_ACCESS_KEY": accessKey,
+			"RUSTFS_SECRET_KEY": secretKey,
 		},
+		WaitingFor: wait.ForHTTP("/health").
+			WithPort("9000/tcp").
+			WithStatusCodeMatcher(func(status int) bool { return status == http.StatusOK }).
+			WithStartupTimeout(45 * time.Second),
 		Started: true,
 	})
 	if err != nil {

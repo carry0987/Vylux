@@ -16,6 +16,14 @@ func streamObjectKey(hash, relPath string) string {
 	return "videos/" + prefix + "/" + hash + "/" + relPath
 }
 
+func audioStreamObjectKey(hash, relPath string) string {
+	prefix := hash
+	if len(hash) >= 2 {
+		prefix = hash[:2]
+	}
+	return "audio/" + prefix + "/" + hash + "/" + relPath
+}
+
 func TestStreamHandler_WithS3CompatibleStorage(t *testing.T) {
 	ts, cfg, store, cleanup := newS3BackedTestServer(t)
 	defer cleanup()
@@ -69,5 +77,40 @@ func TestStreamHandler_InvalidPathRejected(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestStreamHandler_ServesAudioHLSFromAudioNamespace(t *testing.T) {
+	ts, cfg, store, cleanup := newS3BackedTestServer(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	hash := "feedbeef12345678"
+	playlistKey := audioStreamObjectKey(hash, "hls/master.m3u8")
+	playlistBody := []byte("#EXTM3U\n#EXT-X-VERSION:7\n")
+
+	if err := store.Put(ctx, cfg.MediaBucket, playlistKey, bytes.NewReader(playlistBody), "application/vnd.apple.mpegurl"); err != nil {
+		t.Fatalf("upload playlist: %v", err)
+	}
+
+	resp, err := http.Get(ts.URL + "/stream/" + hash + "/hls/master.m3u8")
+	if err != nil {
+		t.Fatalf("GET /stream master playlist: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/vnd.apple.mpegurl" {
+		t.Fatalf("expected playlist content type, got %q", got)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read playlist body: %v", err)
+	}
+	if !bytes.Equal(body, playlistBody) {
+		t.Fatalf("unexpected playlist body: got %q want %q", body, playlistBody)
 	}
 }

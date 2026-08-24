@@ -57,6 +57,10 @@ func videoQueueOptions(fileSize int64, largeThreshold int64) (string, int) {
 	return QueueDefault, 3
 }
 
+func mediaQueueOptions(fileSize int64, largeThreshold int64) (string, int) {
+	return videoQueueOptions(fileSize, largeThreshold)
+}
+
 // EnqueueImageThumbnail enqueues an image:thumbnail task on the critical queue.
 func (c *Client) EnqueueImageThumbnail(ctx context.Context, p *ImageThumbnailPayload) (*asynq.TaskInfo, error) {
 	task, err := NewImageThumbnailTask(p)
@@ -105,6 +109,22 @@ func (c *Client) EnqueueVideoTranscode(ctx context.Context, p *VideoTranscodePay
 	}
 
 	q, maxRetry := videoQueueOptions(fileSize, largeThreshold)
+
+	return c.Enqueue(ctx, task,
+		asynq.Queue(q),
+		asynq.MaxRetry(maxRetry),
+	)
+}
+
+// EnqueueAudioTranscode enqueues an audio:transcode task.
+// Files >= largeThreshold are routed to the large media queue with fewer retries.
+func (c *Client) EnqueueAudioTranscode(ctx context.Context, p *AudioTranscodePayload, fileSize int64, largeThreshold int64) (*asynq.TaskInfo, error) {
+	task, err := NewAudioTranscodeTask(p)
+	if err != nil {
+		return nil, err
+	}
+
+	q, maxRetry := mediaQueueOptions(fileSize, largeThreshold)
 
 	return c.Enqueue(ctx, task,
 		asynq.Queue(q),

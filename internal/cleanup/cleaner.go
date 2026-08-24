@@ -147,6 +147,7 @@ func (c *Cleaner) cancelTask(ctx context.Context, taskID string, queues []string
 func (c *Cleaner) deleteMediaObjects(ctx context.Context, hash string) {
 	c.deletePrefix(ctx, s3PrefixForHash(hash, "images"))
 	c.deletePrefix(ctx, s3PrefixForHash(hash, "videos"))
+	c.deletePrefix(ctx, s3PrefixForHash(hash, "audio"))
 }
 
 func (c *Cleaner) deleteTrackedImageCaches(ctx context.Context, hash string) {

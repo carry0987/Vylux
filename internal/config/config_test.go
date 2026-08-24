@@ -159,6 +159,7 @@ func validConfig() *Config {
 		MaxFileSize:            50 * 1024 * 1024 * 1024,
 		CacheMaxSize:           1024,
 		FFmpegPath:             "ffmpeg",
+		FFprobePath:            "ffprobe",
 		ShakaPackagerPath:      "packager",
 		LogLevel:               "INFO",
 		BaseURL:                "https://media.example.com",

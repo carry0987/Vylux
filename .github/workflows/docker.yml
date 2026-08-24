@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/vylux
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -51,6 +51,7 @@ jobs:
         uses: carry0987/docker-digest-builder@v1
         with:
           image: ${{ env.IMAGE_NAME }}
+          normalize: true
           platform: ${{ matrix.platform }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version-number }}
@@ -91,6 +92,7 @@ jobs:
         uses: carry0987/docker-multi-arch-manifest@v1
         with:
           image: ${{ env.IMAGE_NAME }}
+          normalize: true
           tags: |
             ${{ steps.meta.outputs.version-number }}
             latest

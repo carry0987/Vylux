@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +14,8 @@ import (
 	"Vylux/internal/jobflow"
 	"Vylux/internal/queue"
 	"Vylux/tests/testutil"
+
+	"github.com/labstack/echo/v5"
 )
 
 func TestBuildRetryRequests_FailedVideoFullBuildsStageRetries(t *testing.T) {
@@ -127,6 +131,160 @@ func TestValidateJobRequest_VideoFullRejectsFlatOptions(t *testing.T) {
 	}
 }
 
+func TestValidateJobRequest_AudioTranscodeAcceptsStructuredOptions(t *testing.T) {
+	req := JobRequest{
+		Type:   queue.TypeAudioTranscode,
+		Hash:   "hash123",
+		Source: "uploads/audio.flac",
+		Options: map[string]any{
+			"hls":         true,
+			"mp3":         true,
+			"mp3_bitrate": "192k",
+		},
+	}
+
+	if err := validateJobRequest(&req); err != nil {
+		t.Fatalf("expected audio transcode request to be valid, got %v", err)
+	}
+	if err := canonicalizeJobRequest(&req); err != nil {
+		t.Fatalf("canonicalizeJobRequest: %v", err)
+	}
+	if req.Options["mp3_bitrate"] != "192k" {
+		t.Fatalf("expected bitrate to be preserved, got %#v", req.Options["mp3_bitrate"])
+	}
+}
+
+func TestCanonicalizeJobRequest_AudioTranscodeDefaultsOutputs(t *testing.T) {
+	req := JobRequest{
+		Type:    queue.TypeAudioTranscode,
+		Hash:    "hash123",
+		Source:  "uploads/audio.flac",
+		Options: map[string]any{},
+	}
+
+	if err := canonicalizeJobRequest(&req); err != nil {
+		t.Fatalf("canonicalizeJobRequest: %v", err)
+	}
+	if req.Options["hls"] != true || req.Options["mp3"] != true || req.Options["flac"] != true {
+		t.Fatalf("expected default outputs to be enabled, got %#v", req.Options)
+	}
+	if req.Options["mp3_bitrate"] != "320k" {
+		t.Fatalf("expected default mp3 bitrate 320k, got %#v", req.Options["mp3_bitrate"])
+	}
+}
+
+func TestDecodeAudioJobRequest(t *testing.T) {
+	body := `{
+		"source":{"hash":"hash123","key":"uploads/audio.flac"},
+		"pipeline":{
+			"package":{"hls":{"enabled":true,"profile":"stream_aac_standard"}},
+			"downloads":[{"profile":"download_mp3_high"}]
+		},
+		"delivery":{"callback_url":"https://example.com/callback"}
+	}`
+
+	req, err := decodeAudioJobRequestContext(t, body)
+	if err != nil {
+		t.Fatalf("decodeAudioJobRequest: %v", err)
+	}
+	if req.Type != queue.TypeAudioTranscode {
+		t.Fatalf("type = %q, want %q", req.Type, queue.TypeAudioTranscode)
+	}
+	if req.Hash != "hash123" || req.Source != "uploads/audio.flac" {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+}
+
+func TestDecodeVideoJobRequest(t *testing.T) {
+	body := `{
+		"source":{"hash":"hash123","key":"uploads/video.mp4"},
+		"pipeline":{"package":{"hls":{"enabled":true,"profile":"stream_video_standard","encryption":{"enabled":true}}}},
+		"delivery":{"callback_url":"https://example.com/callback"}
+	}`
+
+	req, err := decodeVideoJobRequestContext(t, body)
+	if err != nil {
+		t.Fatalf("decodeVideoJobRequest: %v", err)
+	}
+	if req.Type != queue.TypeVideoTranscode {
+		t.Fatalf("type = %q, want %q", req.Type, queue.TypeVideoTranscode)
+	}
+	if req.Hash != "hash123" || req.Source != "uploads/video.mp4" {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+}
+
+func TestRequestFingerprint_StructuredMatchesLegacyAudio(t *testing.T) {
+	structuredBody := `{
+		"source":{"hash":"hash123","key":"uploads/audio.flac"},
+		"pipeline":{
+			"package":{"hls":{"enabled":true,"profile":"stream_aac_standard"}},
+			"downloads":[{"format":"mp3","bitrate":"192k"},{"format":"flac"}]
+		}
+	}`
+
+	structuredReq, err := decodeAudioJobRequestContext(t, structuredBody)
+	if err != nil {
+		t.Fatalf("decode structured request: %v", err)
+	}
+	if err := canonicalizeJobRequest(&structuredReq); err != nil {
+		t.Fatalf("canonicalize structured request: %v", err)
+	}
+
+	legacyReq := JobRequest{
+		Type:   queue.TypeAudioTranscode,
+		Hash:   "hash123",
+		Source: "uploads/audio.flac",
+		Options: map[string]any{
+			"hls":         true,
+			"mp3":         true,
+			"flac":        true,
+			"mp3_bitrate": "192k",
+		},
+	}
+	if err := canonicalizeJobRequest(&legacyReq); err != nil {
+		t.Fatalf("canonicalize legacy request: %v", err)
+	}
+
+	structuredFingerprint, err := requestFingerprint(structuredReq)
+	if err != nil {
+		t.Fatalf("requestFingerprint(structured): %v", err)
+	}
+	legacyFingerprint, err := requestFingerprint(legacyReq)
+	if err != nil {
+		t.Fatalf("requestFingerprint(legacy): %v", err)
+	}
+	if structuredFingerprint != legacyFingerprint {
+		t.Fatalf("fingerprints differ: structured=%q legacy=%q", structuredFingerprint, legacyFingerprint)
+	}
+}
+
+func TestEnqueueTask_RejectsMissingAudioSource(t *testing.T) {
+	h := &JobHandler{
+		sourceStore:    testutil.NewFakeStore(),
+		sourceBucket:   "source",
+		largeThreshold: 5,
+		maxFileSize:    10,
+	}
+
+	_, err := h.enqueueTask(t.Context(), JobRequest{
+		Type:   queue.TypeAudioTranscode,
+		Hash:   "hash123",
+		Source: "uploads/missing.flac",
+	})
+	if err == nil {
+		t.Fatal("expected missing source error")
+	}
+
+	requestErr, ok := errors.AsType[*jobRequestError](err)
+	if !ok {
+		t.Fatalf("expected jobRequestError, got %T", err)
+	}
+	if requestErr.status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", requestErr.status, http.StatusBadRequest)
+	}
+}
+
 func TestValidateJobRequest_CallbackURL(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -165,6 +323,26 @@ func TestValidateJobRequest_CallbackURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func decodeAudioJobRequestContext(t *testing.T, body string) (JobRequest, error) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/audio/jobs", bytes.NewBufferString(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	resp := httptest.NewRecorder()
+	c := e.NewContext(req, resp)
+	return decodeAudioJobRequest(c)
+}
+
+func decodeVideoJobRequestContext(t *testing.T, body string) (JobRequest, error) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/video/jobs", bytes.NewBufferString(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	resp := httptest.NewRecorder()
+	c := e.NewContext(req, resp)
+	return decodeVideoJobRequest(c)
 }
 
 func TestEnqueueTask_RejectsOversizedVideoSource(t *testing.T) {

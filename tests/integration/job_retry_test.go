@@ -29,29 +29,40 @@ func TestJobRetry_FailedVideoFullCreatesStageJobs(t *testing.T) {
 		t.Fatalf("upload source fixture: %v", err)
 	}
 
-	createBody := handler.JobRequest{
-		Type:        queue.TypeVideoFull,
-		Hash:        "retry-full-hash",
-		Source:      "uploads/retry.mp4",
-		CallbackURL: "http://example.com/callback",
-		Options: map[string]any{
+	createBody := map[string]any{
+		"source": map[string]any{
+			"hash": "retry-full-hash",
+			"key":  "uploads/retry.mp4",
+		},
+		"pipeline": map[string]any{
 			"cover": map[string]any{
+				"enabled":       true,
 				"timestamp_sec": 2,
 			},
 			"preview": map[string]any{
+				"enabled":   true,
 				"start_sec": 3,
 				"duration":  4,
 				"width":     480,
 				"fps":       10,
 				"format":    "gif",
 			},
-			"transcode": map[string]any{
-				"encrypt": true,
+			"package": map[string]any{
+				"hls": map[string]any{
+					"enabled": true,
+					"profile": "stream_video_standard",
+					"encryption": map[string]any{
+						"enabled": true,
+					},
+				},
 			},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
 		},
 	}
 	bodyJSON, _ := json.Marshal(createBody)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/jobs", bytes.NewReader(bodyJSON))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/video/jobs", bytes.NewReader(bodyJSON))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-API-Key", cfg.APIKey)
 
