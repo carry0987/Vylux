@@ -6,13 +6,14 @@ description: "The entry page for the Vylux docs, outlining service capabilities,
 
 # Vylux
 
-Vylux is a standalone media processing service that separates real-time image transformation and asynchronous video processing into deployable infrastructure capabilities. It does not own your business model. It accepts source objects, validation data, and processing parameters, then produces cacheable, traceable, playable media assets.
+Vylux is a standalone media processing service that separates real-time image transformation and asynchronous media processing into deployable infrastructure capabilities. It does not own your business model. It accepts source objects, validation data, and processing parameters, then produces cacheable, traceable, playable media assets.
 
 Current core capabilities include:
 
 - real-time image transformation through `/img`
 - signed original and thumbnail delivery through `/original` and `/thumb`
-- async jobs: `image:thumbnail`, `video:cover`, `video:preview`, `video:transcode`, and `video:full`
+- domain-specific async creation through `/api/audio/jobs` and `/api/video/jobs`
+- first-class audio outputs for HLS playback, MP3 download, FLAC download, and waveform generation
 - HLS CMAF output with AV1 and H.264 ladders
 - encrypted playback with Bearer-token key delivery through `/api/key/{hash}`
 - PostgreSQL job state, Redis queues, Prometheus metrics, and OpenTelemetry tracing
@@ -44,6 +45,7 @@ This lets you use the same image for local development, Docker Compose, single-n
 
 - `/img` real-time image resize, format conversion, and caching
 - animated `video:preview` output in `webp` and `gif`
+- `audio:transcode` output for audio-only HLS, MP3, FLAC, and waveform artifacts
 - `video:transcode` HLS CMAF output
 - dual-codec ladders with AV1 and H.264
 - portrait and non-16:9 video output sizing

@@ -28,6 +28,7 @@ go test -v ./tests/integration
 
 發布前最重要的三組手動驗證如下：
 
+- `audio:transcode` with HLS + downloads + waveform enabled
 - `video:preview` with `gif`
 - `video:preview` with `webp`
 - `video:transcode` with `encrypt=true`
@@ -36,6 +37,41 @@ go test -v ./tests/integration
 
 ## 建議的 smoke test 順序
 
+### `audio:transcode`
+
+```bash showLineNumbers
+BASE_URL='http://localhost:3000'
+API_KEY='replace-with-api-key'
+
+curl -s \
+    -X POST "$BASE_URL/api/audio/jobs" \
+    -H 'Content-Type: application/json' \
+    -H "X-API-Key: $API_KEY" \
+    -d '{
+        "source": {
+            "hash": "smoke-audio-job",
+            "key": "uploads/sample.flac"
+        },
+        "pipeline": {
+            "package": {
+                "hls": {
+                    "enabled": true,
+                    "profile": "stream_aac_standard"
+                }
+            },
+            "downloads": [
+                {"profile": "download_mp3_high"},
+                {"profile": "download_flac_standard"}
+            ],
+            "waveform": {
+                "enabled": true,
+                "profile": "waveform_standard",
+                "bins": 2048
+            }
+        }
+    }'
+```
+
 ### `video:preview` with `gif`
 
 ```bash showLineNumbers
@@ -43,19 +79,23 @@ BASE_URL='http://localhost:3000'
 API_KEY='replace-with-api-key'
 
 curl -s \
-    -X POST "$BASE_URL/api/jobs" \
+    -X POST "$BASE_URL/api/video/jobs" \
     -H 'Content-Type: application/json' \
     -H "X-API-Key: $API_KEY" \
     -d '{
-        "type": "video:preview",
-        "hash": "smoke-preview-gif",
-        "source": "uploads/sample.mp4",
-        "options": {
-            "start_sec": 1,
-            "duration": 3,
-            "width": 480,
-            "fps": 12,
-            "format": "gif"
+        "source": {
+            "hash": "smoke-preview-gif",
+            "key": "uploads/sample.mp4"
+        },
+        "pipeline": {
+            "preview": {
+                "enabled": true,
+                "start_sec": 1,
+                "duration": 3,
+                "width": 480,
+                "fps": 12,
+                "format": "gif"
+            }
         }
     }'
 ```
@@ -68,15 +108,24 @@ curl -s \
 
 ```bash showLineNumbers
 curl -s \
-    -X POST "$BASE_URL/api/jobs" \
+    -X POST "$BASE_URL/api/video/jobs" \
     -H 'Content-Type: application/json' \
     -H "X-API-Key: $API_KEY" \
     -d '{
-        "type": "video:transcode",
-        "hash": "smoke-transcode-encrypted",
-        "source": "uploads/sample.mp4",
-        "options": {
-            "encrypt": true
+        "source": {
+            "hash": "smoke-transcode-encrypted",
+            "key": "uploads/sample.mp4"
+        },
+        "pipeline": {
+            "package": {
+                "hls": {
+                    "enabled": true,
+                    "profile": "stream_video_standard",
+                    "encryption": {
+                        "enabled": true
+                    }
+                }
+            }
         }
     }'
 ```

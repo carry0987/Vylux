@@ -178,19 +178,23 @@ BASE_URL='http://localhost:3000'
 API_KEY='replace-with-api-key'
 
 curl -s \
-    -X POST "$BASE_URL/api/jobs" \
+    -X POST "$BASE_URL/api/video/jobs" \
     -H 'Content-Type: application/json' \
     -H "X-API-Key: $API_KEY" \
     -d '{
-        "type": "video:preview",
-        "hash": "quickstart-preview-sample",
-        "source": "uploads/sample.mp4",
-        "options": {
-            "start_sec": 1,
-            "duration": 3,
-            "width": 480,
-            "fps": 12,
-            "format": "webp"
+        "source": {
+            "hash": "quickstart-preview-sample",
+            "key": "uploads/sample.mp4"
+        },
+        "pipeline": {
+            "preview": {
+                "enabled": true,
+                "start_sec": 1,
+                "duration": 3,
+                "width": 480,
+                "fps": 12,
+                "format": "webp"
+            }
         }
     }'
 ```
@@ -228,6 +232,6 @@ Before release, cover at least these three smoke-test groups:
 - `GET /healthz` returns `200`
 - `GET /readyz` confirms PostgreSQL, Redis, and buckets are ready
 - `GET /metrics` exposes Prometheus metrics
-- `POST /api/jobs` can enqueue asynchronous media work
+- `POST /api/audio/jobs` and `POST /api/video/jobs` can enqueue asynchronous media work
 
 Next, most teams continue with [Integration Guide](./integration-guide), [Configuration](./operations/configuration), [Jobs API](./api/jobs), and [Observability](./operations/observability).

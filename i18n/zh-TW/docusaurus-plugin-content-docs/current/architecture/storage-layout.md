@@ -142,6 +142,7 @@ videos/{hash[0:2]}/{hash}/...
 
 ```text
 /stream/{hash}/master.m3u8
+/stream/{hash}/hls/master.m3u8
 /stream/{hash}/audio/{track_id}/playlist.m3u8
 /stream/{hash}/video/{variant}/playlist.m3u8
 /stream/{hash}/video/{variant}/seg_1.m4s
@@ -156,7 +157,7 @@ videos/{hash_prefix}/{hash}/{filePath}
 其中 `filePath` 就是 `/stream/{hash}/` 後面的相對路徑。
 
 :::note `/stream/{hash}` 才是穩定的播放對外契約
-media bucket 內部可能儲存的是 `videos/{prefix}/{hash}/master.m3u8`，但對外播放入口仍應優先使用 `/stream/{hash}/master.m3u8`。
+media bucket 內部可能儲存的是 `videos/{prefix}/{hash}/master.m3u8` 或 `audio/{prefix}/{hash}/hls/master.m3u8`，但對外播放入口仍應優先使用 `/stream/{hash}/...` 這組 public route。
 :::
 
 ## 什麼不在 bucket 內

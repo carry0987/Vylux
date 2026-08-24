@@ -1,11 +1,13 @@
 ---
 title: 影片處理流程
-description: "cover、preview、transcode、video:full 的處理模式，包含 queue、輸出路徑、ladder 與 workflow 行為。"
+description: "public 影片建立契約，以及內部 cover、preview、transcode、video:full worker workflow。"
 ---
 
 # 影片處理流程
 
-Vylux 的影片處理目前有四個主要 job 類型：
+Vylux 對外透過 `POST /api/video/jobs` 暴露影片處理能力。
+
+在 worker 內部，影片處理目前仍使用四個主要 job 類型：
 
 - `video:cover`
 - `video:preview`
@@ -20,6 +22,27 @@ Vylux 的影片處理目前有四個主要 job 類型：
 | `video:preview` | 動態預覽 | `videos/{prefix}/{hash}/preview.webp` 或 `preview.gif` |
 | `video:transcode` | HLS CMAF 套件 | `videos/{prefix}/{hash}/master.m3u8` 與 `audio/`、`video/` 子樹 |
 | `video:full` | cover + preview + transcode 聚合結果 | 同上，但以單一 workflow 結果回寫 |
+
+## Public create contract
+
+public 影片 API 採 deliverable-oriented 設計，而不是直接暴露內部 task type。
+
+目前 request body 可描述：
+
+- `cover`
+- `preview`
+- `package.hls`
+
+不應把 `video:cover`、`video:preview`、`video:transcode`、`video:full` 這些內部 worker vocabulary 直接視為 public contract。
+
+目前支援的 public deliverable 組合有：
+
+- `cover` only
+- `preview` only
+- `package.hls` only
+- `cover + preview + package.hls`
+
+worker 會在這個 public contract 背後自己決定應使用哪種內部 task shape。
 
 ## Queue 與重試
 

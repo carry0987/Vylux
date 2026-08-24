@@ -37,8 +37,8 @@ flowchart LR
 	Client[Browser / App / Player] --> HTTP[Vylux HTTP Server]
 	HTTP -->|GET /original and source reads for /img| Source[(Source Store)]
 	HTTP -->|GET /thumb and GET /stream/*| Media[(Media Store)]
-	HTTP -->|POST /api/jobs| Redis[(Redis / asynq)]
-	HTTP -->|GET /api/jobs| PG[(PostgreSQL)]
+	HTTP -->|POST /api/audio/jobs and POST /api/video/jobs| Redis[(Redis / asynq)]
+	HTTP -->|GET /api/jobs/:id| PG[(PostgreSQL)]
 	HTTP -->|GET /api/key/:hash| PG
 	Redis --> Worker[Vylux Worker]
 	Worker --> FFmpeg[FFmpeg / ffprobe]
@@ -53,8 +53,8 @@ flowchart LR
 
 | Component | Responsibility |
 | --- | --- |
-| HTTP server | serves `/img`, `/original`, `/thumb`, `/api/jobs`, `/stream`, `/api/key`, `/healthz`, `/readyz`, and `/metrics` |
-| Worker | consumes async jobs, downloads source media, runs cover / preview / transcode workflows, and sends webhooks |
+| HTTP server | serves `/img`, `/original`, `/thumb`, `/api/audio/jobs`, `/api/video/jobs`, `/api/jobs/:id`, `/stream`, `/api/key`, `/healthz`, `/readyz`, and `/metrics` |
+| Worker | consumes async jobs, downloads source media, runs audio and video processing workflows, and sends webhooks |
 | PostgreSQL | stores job rows, workflow results, retry metadata, wrapped content keys, and image cache tracking |
 | Redis | backs asynq queues, task state, and API/key endpoint rate limiting |
 | Source store | source bucket plus `SOURCE_S3_*`; immutable or upstream-managed source objects; Vylux reads from it |
@@ -66,7 +66,8 @@ flowchart LR
 - `/img` real-time image processing
 - `/original` signed source-object proxying
 - `/thumb` signed reads of already-generated image assets
-- `/api/jobs` job creation and lookup
+- `/api/audio/jobs` and `/api/video/jobs` job creation
+- `/api/jobs/:id` job lookup
 - `/stream/{hash}/*` HLS asset proxying
 - `/api/key/{hash}` Bearer-token validation and 16-byte key delivery
 - `/healthz`, `/readyz`, and `/metrics`
@@ -88,8 +89,9 @@ The HTTP side also owns:
 - produce machine-readable workflow results and retry plans when needed
 - deliver success or failure webhooks
 
-The worker does not only run `video:transcode`. Supported job types today are:
+The worker does not only run `video:transcode`. Supported internal job types today are:
 
+- `audio:transcode`
 - `image:thumbnail`
 - `video:cover`
 - `video:preview`
@@ -108,7 +110,7 @@ Vylux uses asynq with three named queues:
 | `default` | `3` | normal video jobs |
 | `video:large` | `1` | lower-priority large transcode work |
 
-For video jobs, the `POST /api/jobs` path performs a source-storage preflight check, measures the actual source size, and can route large work to `video:large` before enqueueing.
+For audio and streaming video jobs, the create path performs a source-storage preflight check, measures the actual source size, and can route large work before enqueueing.
 
 :::note Queue selection is decided by Vylux, not the caller
 Callers do not choose `critical`, `default`, or `video:large` directly. The server validates the request, inspects the real source object when needed, and then routes the task.
@@ -134,4 +136,4 @@ Your upstream application is still responsible for deciding who can submit jobs,
 
 - for request-level behavior, read [Request Lifecycle](./request-lifecycle)
 - for object-key naming and storage mapping, read [Storage Layout](./storage-layout)
-- for concrete media behavior, read [Image Pipeline](../media/image-pipeline) and [Video Pipeline](../media/video-pipeline)
+- for concrete media behavior, read [Image Pipeline](../media/image-pipeline), [Audio Pipeline](../media/audio-pipeline), and [Video Pipeline](../media/video-pipeline)

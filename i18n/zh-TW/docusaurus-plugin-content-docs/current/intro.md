@@ -6,13 +6,14 @@ description: "Vylux 的文件入口，概述服務能力、部署形態與應優
 
 # Vylux
 
-Vylux 是一個獨立運行的媒體處理服務，將圖片即時轉換與影片非同步處理拆成可單獨部署的基礎能力。它不承載你的業務模型，只負責接收來源物件、驗證資訊與處理參數，輸出可快取、可追蹤、可播放的媒體資產。
+Vylux 是一個獨立運行的媒體處理服務，將圖片即時轉換與非同步媒體處理拆成可單獨部署的基礎能力。它不承載你的業務模型，只負責接收來源物件、驗證資訊與處理參數，輸出可快取、可追蹤、可播放的媒體資產。
 
 目前的核心能力包括：
 
 - 即時圖片轉換：`/img` 依 URL 參數即時 resize、轉檔與快取
 - 原檔與縮圖代理：`/original`、`/thumb`
-- 非同步工作：`image:thumbnail`、`video:cover`、`video:preview`、`video:transcode`、`video:full`
+- 以 domain-specific route 建立非同步工作：`/api/audio/jobs` 與 `/api/video/jobs`
+- 第一級音訊輸出：audio-only HLS、MP3、FLAC 與 waveform
 - HLS CMAF：AV1 + H.264 ladder、fMP4 segment、Shaka Packager 打包
 - 加密播放：CBCS / SAMPLE-AES、`/api/key/{hash}` Bearer token 金鑰發放
 - 維運能力：PostgreSQL job state、Redis queue、Prometheus metrics、OpenTelemetry tracing
@@ -44,6 +45,7 @@ Vylux 是一個獨立運行的媒體處理服務，將圖片即時轉換與影�
 
 - `/img` 即時圖片縮放、格式轉換與快取
 - `video:preview` 動態預覽，支援 `webp` 與 `gif`
+- `audio:transcode` 對應的 audio-only HLS、MP3、FLAC、waveform 輸出
 - `video:transcode` 產出 HLS CMAF
 - AV1 + H.264 雙 codec ladder
 - portrait / non-16:9 影片的實際解析度輸出

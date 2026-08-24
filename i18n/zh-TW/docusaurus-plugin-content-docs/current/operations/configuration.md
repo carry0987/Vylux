@@ -143,6 +143,7 @@ head -c 16 /dev/urandom | xxd -p -c 32
 | `MAX_FILE_SIZE` | 否 | `53687091200` | 可接受的最大來源檔案大小，單位 bytes |
 | `CACHE_MAX_SIZE` | 否 | `1073741824` | 記憶體 LRU 圖片快取上限，單位 bytes |
 | `FFMPEG_PATH` | 否 | `ffmpeg` | FFmpeg binary 路徑 |
+| `FFPROBE_PATH` | 否 | `ffprobe` | FFprobe binary 路徑 |
 | `SHAKA_PACKAGER_PATH` | 否 | `packager` | Shaka Packager binary 路徑 |
 
 容器部署下，Vylux 會固定使用 `/var/cache/vylux` 作為大檔暫存工作區；如果你想把實際儲存位置放在別處，請把你偏好的 host path、named volume 或平台磁碟映射到容器內的 `/var/cache/vylux`。

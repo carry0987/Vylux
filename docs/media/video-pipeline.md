@@ -1,11 +1,13 @@
 ---
 title: Video Pipeline
-description: "The cover, preview, transcode, and `video:full` workflows, including queues, output paths, ladder resolution, and workflow behavior."
+description: "The public video create contract plus the internal cover, preview, transcode, and video:full worker workflows."
 ---
 
 # Video Pipeline
 
-Vylux currently exposes four main video job types:
+Vylux exposes video processing publicly through `POST /api/video/jobs`.
+
+Internally, the worker still uses four main video job types:
 
 - `video:cover`
 - `video:preview`
@@ -20,6 +22,27 @@ Vylux currently exposes four main video job types:
 | `video:preview` | animated preview | `videos/{prefix}/{hash}/preview.webp` or `preview.gif` |
 | `video:transcode` | HLS CMAF package | `videos/{prefix}/{hash}/master.m3u8` plus `audio/` and `video/` subtrees |
 | `video:full` | aggregated cover + preview + transcode result | same artifacts, returned through one workflow payload |
+
+## Public create contract
+
+The public video API is deliverable-oriented rather than task-oriented.
+
+The current public request body can describe:
+
+- `cover`
+- `preview`
+- `package.hls`
+
+It must not expose internal worker vocabulary such as `video:cover`, `video:preview`, `video:transcode`, or `video:full`.
+
+Supported public combinations today are:
+
+- `cover` only
+- `preview` only
+- `package.hls` only
+- `cover + preview + package.hls`
+
+The worker chooses the internal task shape behind that contract.
 
 ## Queues and retries
 

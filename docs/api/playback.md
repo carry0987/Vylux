@@ -27,7 +27,7 @@ Common paths include:
 
 ```text
 /stream/{hash}/master.m3u8
-/stream/{hash}/audio/und_aac_2ch/playlist.m3u8
+/stream/{hash}/hls/master.m3u8
 /stream/{hash}/video/r1080_h264/playlist.m3u8
 /stream/{hash}/video/r1080_h264/seg_1.m4s
 ```
@@ -39,6 +39,9 @@ MEDIA_HASH='movie-2026-04-01'
 
 curl -s \
     "http://localhost:3000/stream/$MEDIA_HASH/master.m3u8"
+
+curl -s \
+    "http://localhost:3000/stream/$MEDIA_HASH/hls/master.m3u8"
 
 curl -s \
     "http://localhost:3000/stream/$MEDIA_HASH/video/r720_h264/playlist.m3u8"
@@ -57,7 +60,7 @@ curl -I \
 - returns `Access-Control-Allow-Origin: *`
 
 :::tip Start playback from the master playlist
-For public playback, the normal entrypoint is `/stream/{hash}/master.m3u8`. Treat the object keys stored in job results as backing storage paths, not as browser-facing URLs.
+For public playback, the entrypoint depends on the media result. Video HLS currently starts from `/stream/{hash}/master.m3u8`, while the audio-only HLS path currently starts from `/stream/{hash}/hls/master.m3u8`. Treat the object keys stored in job results as backing storage paths, not as browser-facing URLs.
 :::
 
 ## `GET /api/key/{hash}`

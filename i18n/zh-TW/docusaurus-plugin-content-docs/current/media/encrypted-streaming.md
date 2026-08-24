@@ -16,8 +16,8 @@ Vylux 目前的受限影片模式是：
 
 加密目前出現在：
 
-- `video:transcode` 且 `options.encrypt=true`
-- `video:full` 且 `options.transcode.encrypt=true`
+- `POST /api/video/jobs` 且 `pipeline.package.hls.encryption.enabled=true`
+- 實作這個 public contract 的內部 `video:transcode` 與 `video:full` worker flow
 
 若未開啟 `encrypt`，整條 HLS pipeline 仍正常產出，只是不會產生 encryption metadata，也不會有 `/api/key/{hash}` 的存取需求。
 

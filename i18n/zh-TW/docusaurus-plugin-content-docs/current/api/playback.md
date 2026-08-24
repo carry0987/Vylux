@@ -27,7 +27,7 @@ description: "`/stream/{hash}/*` 與 `/api/key/{hash}` 的路徑模型、授權�
 
 ```text
 /stream/{hash}/master.m3u8
-/stream/{hash}/audio/und_aac_2ch/playlist.m3u8
+/stream/{hash}/hls/master.m3u8
 /stream/{hash}/video/r1080_h264/playlist.m3u8
 /stream/{hash}/video/r1080_h264/seg_1.m4s
 ```
@@ -39,6 +39,9 @@ MEDIA_HASH='movie-2026-04-01'
 
 curl -s \
     "http://localhost:3000/stream/$MEDIA_HASH/master.m3u8"
+
+curl -s \
+    "http://localhost:3000/stream/$MEDIA_HASH/hls/master.m3u8"
 
 curl -s \
     "http://localhost:3000/stream/$MEDIA_HASH/video/r720_h264/playlist.m3u8"
@@ -57,7 +60,7 @@ curl -I \
 - 回應會附 `Access-Control-Allow-Origin: *`
 
 :::tip 播放通常從 master playlist 開始
-對外播放時，正常入口通常是 `/stream/{hash}/master.m3u8`。job 結果裡的 object key 應視為後端 storage 路徑，而不是直接給瀏覽器的 public URL。
+對外播放時，入口會依媒體種類不同而不同：影片通常是 `/stream/{hash}/master.m3u8`，音訊 HLS 目前通常是 `/stream/{hash}/hls/master.m3u8`。job 結果裡的 object key 應視為後端 storage 路徑，而不是直接給瀏覽器的 public URL。
 :::
 
 ## `GET /api/key/{hash}`

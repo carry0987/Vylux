@@ -11,7 +11,7 @@ If you have already read [Integration Guide](./integration-guide), these recipes
 
 ## Recipe 1: publish a generated cover image
 
-Use this flow when your application creates a `video:cover` job or reads the `cover` artifact from a `video:full` workflow.
+Use this flow when your application requests a cover artifact through `POST /api/video/jobs` or reads the `cover` artifact from a `video:full` workflow.
 
 Goal:
 
@@ -19,7 +19,7 @@ Return a browser-safe public URL for the generated cover image without exposing 
 
 Flow:
 
-1. your backend submits a `video:cover` or `video:full` job with `X-API-Key`
+1. your backend submits a video job with `cover.enabled=true` or a full-process video job with `cover`, `preview`, and `package.hls` enabled
 2. your backend polls the job or receives the callback payload
 3. your backend reads the generated key, for example `videos/mo/movie-2026-04-01/cover.jpg`
 4. your backend signs a `/thumb/{sig}/{encoded_key}` URL with `HMAC_SECRET`
@@ -53,7 +53,7 @@ Use `/img` only when you need on-demand transformation from a source-bucket obje
 
 ## Recipe 2: play encrypted HLS output
 
-Use this flow when `video:transcode` or `video:full` finished with encryption enabled.
+Use this flow when a video HLS job finished with encryption enabled.
 
 Goal:
 

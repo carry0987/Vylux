@@ -143,6 +143,7 @@ All five values are expected to be hex strings. `HMAC_SECRET`, `API_KEY`, `WEBHO
 | `MAX_FILE_SIZE` | no | `53687091200` | maximum accepted source size in bytes |
 | `CACHE_MAX_SIZE` | no | `1073741824` | in-memory LRU image-cache limit in bytes |
 | `FFMPEG_PATH` | no | `ffmpeg` | FFmpeg binary path |
+| `FFPROBE_PATH` | no | `ffprobe` | FFprobe binary path |
 | `SHAKA_PACKAGER_PATH` | no | `packager` | Shaka Packager binary path |
 
 In containerized deployments, Vylux uses `/var/cache/vylux` as the scratch workspace for large temporary media files. If you want the actual storage to live somewhere else, mount your preferred host path, named volume, or platform disk to `/var/cache/vylux` inside the container.

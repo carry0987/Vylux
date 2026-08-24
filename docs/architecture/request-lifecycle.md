@@ -18,7 +18,7 @@ If the issue appears before any queue work exists, start with image delivery or 
 
 ### Asynchronous jobs
 
-- `POST /api/jobs` validation and idempotency
+- `POST /api/audio/jobs` and `POST /api/video/jobs` validation and idempotency
 - Redis / asynq enqueueing and worker-side execution
 
 ### Playback and cleanup
@@ -85,9 +85,9 @@ sequenceDiagram
 	participant PG as PostgreSQL
 	participant Redis as Redis / asynq
 
-	App->>Server: POST /api/jobs
+	App->>Server: POST /api/audio/jobs or POST /api/video/jobs
 	Server->>Server: validate API key and JSON schema
-	Server->>Server: canonicalize options
+	Server->>Server: normalize into internal job type and canonical options
 	Server->>PG: idempotency lookup by request fingerprint
 	alt existing active or completed job
 		PG-->>Server: existing job/result
@@ -99,16 +99,16 @@ sequenceDiagram
 	end
 ```
 
-The important part is not only enqueueing work. The server first computes a request fingerprint from:
+The important part is not only enqueueing work. After route-specific decoding, the server computes a request fingerprint from:
 
 1. `type`
 2. `hash`
 3. `source`
 4. canonicalized `options`
 
-This is what gives `POST /api/jobs` its idempotency behavior. The source bucket itself is deployment-owned runtime config, not caller input.
+This is what gives the domain-specific create routes their idempotency behavior. The source bucket itself is deployment-owned runtime config, not caller input.
 
-For video jobs, the server also checks the configured source store before enqueueing so it can confirm existence, measure actual size, and route oversized work to `video:large` when needed.
+For audio jobs and streaming video jobs, the server also checks the configured source store before enqueueing so it can confirm existence, measure actual size, and route oversized work when needed.
 
 :::tip A `202 Accepted` means the request passed the server boundary
 Once the server accepts the job, the next debugging boundary is worker execution rather than request validation.
@@ -116,7 +116,21 @@ Once the server accepts the job, the next debugging boundary is worker execution
 
 ## 3. Worker execution flow
 
-Worker execution falls into two categories: single-stage jobs and the `video:full` workflow.
+Worker execution falls into three categories: audio jobs, single-stage video jobs, and the `video:full` workflow.
+
+### Audio jobs
+
+- `audio:transcode`
+
+Shared pattern:
+
+1. dequeue the task
+2. mark the job as `processing`
+3. download the source media
+4. probe the source and validate the format
+5. generate requested outputs such as HLS, downloads, and waveform data
+6. persist structured stage results and final artifacts
+7. optionally send a webhook callback
 
 ### Single-stage jobs
 
@@ -161,7 +175,7 @@ sequenceDiagram
 	participant KeyAPI as /api/key/{hash}
 	participant PG as PostgreSQL
 
-	Player->>Server: GET /stream/{hash}/master.m3u8
+	Player->>Server: GET /stream/{hash}/master.m3u8 or /stream/{hash}/hls/master.m3u8
 	Server->>Media: read videos/{prefix}/{hash}/master.m3u8
 	Media-->>Server: playlist
 	Server-->>Player: playlist
@@ -176,7 +190,7 @@ sequenceDiagram
 	end
 ```
 
-The server does not keep local copies of segments. It maps `/stream/{hash}/...` directly to media-bucket objects.
+The server does not keep local copies of segments. It maps `/stream/{hash}/...` directly to media-bucket objects in the appropriate `videos/...` or `audio/...` namespace.
 
 :::note Playback uses stable public routes over storage keys
 Public players should use `/stream/{hash}` and `/api/key/{hash}`. Raw media-bucket keys remain an internal storage detail.
@@ -186,13 +200,15 @@ Public players should use `/stream/{hash}` and `/api/key/{hash}`. Raw media-buck
 
 `DELETE /api/media/{hash}` is shorter-lived but important for consistency:
 
-1. resolve media-bucket objects associated with the hash
-2. clear image-cache tracking and related metadata
-3. cancel active, retry, or scheduled queue tasks
-4. remove encryption keys and job records
+1. cancel active, retry, or scheduled queue tasks
+2. delete media-bucket objects associated with the hash
+3. delete tracked image-cache objects
+4. only after media is confirmed gone, remove encryption keys, image-cache index rows, and job records
 
-This flow is intentionally best-effort and idempotent, which makes it suitable for upstream compensation or retention jobs.
+This flow is retry-safe, but it is no longer modeled as unconditional best-effort success.
 
 :::tip Cleanup should be safe to call again
-Because cleanup is best-effort and idempotent, upstream retention or compensation flows can retry it without treating every repeat call as an error.
+Upstream retention or compensation flows can retry cleanup without creating duplicate side effects. A retry should continue until Vylux returns `204 No Content`.
 :::
+
+When cleanup cannot confirm media removal, Vylux returns `503 Service Unavailable` so the caller knows it is not yet safe to forget the hash.

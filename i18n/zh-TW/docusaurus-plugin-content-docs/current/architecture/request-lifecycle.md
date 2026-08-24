@@ -18,7 +18,7 @@ description: "Vylux 內最重要的幾條資料流：即時圖片、job 提交�
 
 ### Asynchronous jobs
 
-- `POST /api/jobs` 的驗證與 idempotency
+- `POST /api/audio/jobs` 與 `POST /api/video/jobs` 的驗證與 idempotency
 - Redis / asynq enqueue 與 worker 執行
 
 ### Playback and cleanup
@@ -80,7 +80,7 @@ sequenceDiagram
 
 ## 2. Job 提交
 
-`POST /api/jobs`
+`POST /api/audio/jobs` / `POST /api/video/jobs`
 
 ```mermaid
 sequenceDiagram
@@ -89,9 +89,9 @@ sequenceDiagram
 	participant PG as PostgreSQL
 	participant Redis as Redis / asynq
 
-	App->>Server: POST /api/jobs
+	App->>Server: POST /api/audio/jobs 或 POST /api/video/jobs
 	Server->>Server: 驗證 API key 與 JSON schema
-	Server->>Server: canonicalize options
+	Server->>Server: 正規化成內部 job type 與 canonical options
 	Server->>PG: 依 request fingerprint 查 idempotency
 	alt 既有 active/completed job
 		PG-->>Server: existing job/result
@@ -113,7 +113,7 @@ sequenceDiagram
 
 來源 bucket 本身不是呼叫端可覆寫的欄位，而是由部署時的 runtime 設定決定。
 
-對影片類工作，server 在 enqueue 前還會檢查 source store，確認物件存在、量測實際大小，並在需要時把大型任務路由到 `video:large`。
+對音訊工作與具串流輸出的影片工作，server 在 enqueue 前還會檢查 source store，確認物件存在、量測實際大小，並在需要時做大型任務路由。
 
 :::tip `202 Accepted` 代表問題邊界已經進入 worker
 當 server 已回 `202 Accepted`，代表 request 驗證大致通過；後續若有問題，下一個排查邊界通常是 worker 執行，而不是 HTTP 請求本身。
@@ -121,7 +121,21 @@ sequenceDiagram
 
 ## 3. Worker 執行
 
-Worker 執行可分成兩類：單階段任務，以及 `video:full` workflow。
+Worker 執行可分成三類：音訊工作、單階段影片任務，以及 `video:full` workflow。
+
+### 音訊工作
+
+- `audio:transcode`
+
+共同模式：
+
+1. 從 queue 取出 task
+2. 把 job status 更新為 `processing`
+3. 下載來源媒體
+4. probe 並驗證來源格式
+5. 產生所需輸出，例如 HLS、downloads、waveform
+6. 回寫結構化 stage 結果與最終 artifacts
+7. 視需要送 webhook callback
 
 ### 單階段任務
 
@@ -168,7 +182,7 @@ sequenceDiagram
 	participant KeyAPI as /api/key
 	participant PG as PostgreSQL
 
-	Player->>Server: GET /stream/{hash}/master.m3u8
+	Player->>Server: GET /stream/{hash}/master.m3u8 或 /stream/{hash}/hls/master.m3u8
 	Server->>Media: 讀 videos/{prefix}/{hash}/master.m3u8
 	Media-->>Server: playlist
 	Server-->>Player: playlist
@@ -201,13 +215,15 @@ sequenceDiagram
 
 `DELETE /api/media/{hash}` 的生命週期比較短，但對資料一致性很重要：
 
-1. 依 `hash` 找出相關 media bucket objects
-2. 清除 image cache tracking 與相關資料列
-3. 取消 queue 中的 active / retry / scheduled tasks
-4. 刪除 encryption key 與 job 紀錄
+1. 取消 queue 中的 active / retry / scheduled tasks
+2. 刪除該 hash 對應的 media bucket objects
+3. 刪除已追蹤的 image cache objects
+4. 只有在媒體已確認消失後，才刪除 encryption key、image cache index row 與 job 紀錄
 
-這個流程設計為 best-effort 與 idempotent，適合上游補償流程重複呼叫。
+這個流程可以安全重試，但不再把「有嘗試過」直接視為成功。
 
 :::tip cleanup 設計上就應該可安全重試
-因為 cleanup 是 best-effort 且 idempotent，上游的 retention 或補償流程可以安全重複呼叫，不必把每次重試都視為錯誤。
+上游的 retention 或補償流程可以安全重試 cleanup；只有當 Vylux 回 `204 No Content` 時，才代表 cleanup 已確認完成。
 :::
+
+如果 cleanup 無法確認媒體真的已移除，Vylux 會回 `503 Service Unavailable`，讓 caller 知道現在還不能安全忘掉該 hash。

@@ -178,19 +178,23 @@ BASE_URL='http://localhost:3000'
 API_KEY='replace-with-api-key'
 
 curl -s \
-    -X POST "$BASE_URL/api/jobs" \
+    -X POST "$BASE_URL/api/video/jobs" \
     -H 'Content-Type: application/json' \
     -H "X-API-Key: $API_KEY" \
     -d '{
-        "type": "video:preview",
-        "hash": "quickstart-preview-sample",
-        "source": "uploads/sample.mp4",
-        "options": {
-            "start_sec": 1,
-            "duration": 3,
-            "width": 480,
-            "fps": 12,
-            "format": "webp"
+        "source": {
+            "hash": "quickstart-preview-sample",
+            "key": "uploads/sample.mp4"
+        },
+        "pipeline": {
+            "preview": {
+                "enabled": true,
+                "start_sec": 1,
+                "duration": 3,
+                "width": 480,
+                "fps": 12,
+                "format": "webp"
+            }
         }
     }'
 ```
@@ -211,7 +215,7 @@ curl -s \
 做到這裡時，不要把 storage key 直接當成最終對外 URL：
 
 - 若 job 回傳的是 cover、preview、thumbnail 這類 media-bucket key，應先轉成已簽名的 `/thumb/{sig}/{encoded_key}` URL 再提供給瀏覽器
-- 若 job 回傳的是串流結果，對外播放入口應使用 `/stream/{hash}/master.m3u8`，而不是 raw `master_playlist` storage key
+- 若 job 回傳的是影片串流結果，對外播放入口通常使用 `/stream/{hash}/master.m3u8`；若是音訊 HLS，則使用 `/stream/{hash}/hls/master.m3u8`
 - 若開啟加密播放，還需要額外產生 `/api/key/{hash}` 用的 Bearer token，且只在 key 請求上附加
 
 完整的 job 結果到對外 URL 映射，請看 [整合導覽](./integration-guide)。
@@ -231,7 +235,7 @@ curl -s \
 - `GET /healthz` 回 `200`
 - `GET /readyz` 可檢查 PostgreSQL、Redis 與 bucket 是否就緒
 - `GET /metrics` 回 Prometheus metrics
-- `POST /api/jobs` 可建立非同步處理工作
+- `POST /api/audio/jobs` 與 `POST /api/video/jobs` 可建立非同步處理工作
 
 下一步通常是：
 

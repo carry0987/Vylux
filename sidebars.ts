@@ -24,7 +24,7 @@ const sidebars: SidebarsConfig = {
         {
             type: 'category',
             label: 'Media Pipelines',
-            items: ['media/image-pipeline', 'media/video-pipeline', 'media/encrypted-streaming'],
+            items: ['media/image-pipeline', 'media/audio-pipeline', 'media/video-pipeline', 'media/encrypted-streaming'],
         },
         {
             type: 'category',

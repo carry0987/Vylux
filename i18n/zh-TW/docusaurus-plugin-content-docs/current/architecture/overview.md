@@ -37,8 +37,8 @@ flowchart LR
     Client[Browser / App / Player] --> HTTP[Vylux HTTP Server]
     HTTP -->|GET /original 與 /img 的來源讀取| Source[(Source Store)]
     HTTP -->|GET /thumb 與 GET /stream/*| Media[(Media Store)]
-    HTTP -->|POST /api/jobs| Redis[(Redis / asynq)]
-    HTTP -->|GET /api/jobs| PG[(PostgreSQL)]
+    HTTP -->|POST /api/audio/jobs 與 POST /api/video/jobs| Redis[(Redis / asynq)]
+    HTTP -->|GET /api/jobs/:id| PG[(PostgreSQL)]
     HTTP -->|GET /api/key/:hash| PG
     Redis --> Worker[Vylux Worker]
     Worker --> FFmpeg[FFmpeg / ffprobe]
@@ -53,8 +53,8 @@ flowchart LR
 
 | 元件 | 主要責任 |
 | --- | --- |
-| HTTP server | 提供 `/img`、`/original`、`/thumb`、`/api/jobs`、`/stream`、`/api/key`、`/healthz`、`/readyz`、`/metrics` |
-| Worker | 消費非同步任務，下載來源媒體，執行 cover / preview / transcode，回寫結果與 webhook |
+| HTTP server | 提供 `/img`、`/original`、`/thumb`、`/api/audio/jobs`、`/api/video/jobs`、`/api/jobs/:id`、`/stream`、`/api/key`、`/healthz`、`/readyz`、`/metrics` |
+| Worker | 消費非同步任務，下載來源媒體，執行音訊與影片處理流程，回寫結果與 webhook |
 | PostgreSQL | 保存 job rows、workflow results、retry metadata、wrapped content keys、image cache tracking |
 | Redis | 承載 asynq queue、task state、API rate limit 與 key endpoint rate limit |
 | Source store | `SOURCE_BUCKET` 加上 `SOURCE_S3_*`；原始來源物件，Vylux 只讀 |
@@ -66,7 +66,8 @@ flowchart LR
 - `/img` 即時圖片處理
 - `/original` 帶簽名的原檔代理
 - `/thumb` 已處理資產的簽名讀取
-- `/api/jobs` 建立與查詢工作
+- `/api/audio/jobs` 與 `/api/video/jobs` 建立工作
+- `/api/jobs/:id` 查詢工作
 - `/stream/{hash}/*` 代理 HLS 資產
 - `/api/key/{hash}` 驗證 Bearer token 後回傳 16-byte AES key
 - `/healthz`、`/readyz`、`/metrics`
@@ -88,8 +89,9 @@ flowchart LR
 - 失敗時寫入 machine-readable workflow state 與 retry plan
 - 成功或失敗後回送 webhook callback
 
-Worker 不是只跑單一 `video:transcode`。目前合法任務類型包括：
+Worker 不是只跑單一 `video:transcode`。目前合法的內部任務類型包括：
 
+- `audio:transcode`
 - `image:thumbnail`
 - `video:cover`
 - `video:preview`
@@ -108,7 +110,7 @@ Vylux 使用 asynq，定義了三個 queue：
 | `default` | `3` | 一般影片任務 |
 | `video:large` | `1` | 大檔轉碼的低優先度 queue |
 
-對影片類任務而言，`POST /api/jobs` 會先對 source storage 做前置檢查，取得實際檔案大小，再決定是否要把工作送進 `video:large`。
+對音訊工作與具串流輸出的影片工作，建立路徑都會先對 source storage 做前置檢查，取得實際檔案大小，再在需要時決定任務路由。
 
 :::note Queue 選擇不是由呼叫端決定的
 呼叫端不會直接指定 `critical`、`default` 或 `video:large`。server 會先驗證請求、必要時檢查真實來源檔案，再決定任務應該進哪個 queue。
@@ -134,4 +136,4 @@ Vylux 刻意不承擔以下責任：
 
 - 若你想看 request 細節，下一頁讀 [請求生命週期](./request-lifecycle)
 - 若你想看 key naming 與 object mapping，讀 [儲存結構](./storage-layout)
-- 若你想看實際媒體處理流程，讀 [圖片處理流程](../media/image-pipeline) 與 [影片處理流程](../media/video-pipeline)
+- 若你想看實際媒體處理流程，讀 [圖片處理流程](../media/image-pipeline)、[音訊處理流程](../media/audio-pipeline) 與 [影片處理流程](../media/video-pipeline)

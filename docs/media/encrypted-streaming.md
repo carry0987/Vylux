@@ -16,8 +16,8 @@ Protected playback in Vylux currently uses:
 
 Encryption currently appears in:
 
-- `video:transcode` when `options.encrypt=true`
-- `video:full` when `options.transcode.encrypt=true`
+- `POST /api/video/jobs` when `pipeline.package.hls.encryption.enabled=true`
+- the internal `video:transcode` and `video:full` worker flows that implement that public contract
 
 If `encrypt` is false, the HLS pipeline still runs normally but does not emit encryption metadata or require `/api/key/{hash}`.
 

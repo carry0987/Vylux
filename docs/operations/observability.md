@@ -125,7 +125,7 @@ service:
 
 1. Start Jaeger and the collector.
 2. Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` for both server and worker.
-3. Submit a `POST /api/jobs`, ideally `video:transcode` or `video:full`.
+3. Submit a `POST /api/audio/jobs` or `POST /api/video/jobs` request.
 4. Capture the `X-Trace-ID` from the HTTP response headers or logs.
 5. Open `http://localhost:16686` and search for service `vylux` or paste the trace ID directly.
 

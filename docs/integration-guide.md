@@ -42,7 +42,7 @@ That separation is intentional. Vylux owns media processing and media delivery s
 
 | Secret | Used for | Who should hold it |
 | --- | --- | --- |
-| `API_KEY` | internal `/api/*` management endpoints such as `/api/jobs` | your backend or internal tooling only |
+| `API_KEY` | internal `/api/*` management endpoints such as `/api/audio/jobs`, `/api/video/jobs`, and `/api/jobs/{id}` | your backend or internal tooling only |
 | `HMAC_SECRET` | signing `/img`, `/original`, and `/thumb` URLs | your backend or auth/signing service only |
 | `KEY_TOKEN_SECRET` | signing Bearer tokens for `/api/key/{hash}` | your backend or auth/signing service only |
 
@@ -69,7 +69,7 @@ Treat those values as internal storage references unless the docs explicitly say
 | `results.key` from image-style outputs | object key in the media bucket | sign a `/thumb/{sig}/{encoded_key}` URL |
 | `results.artifacts.cover.key` | generated cover object key in the media bucket | sign a `/thumb/{sig}/{encoded_key}` URL |
 | `results.artifacts.preview.key` | generated preview object key in the media bucket | sign a `/thumb/{sig}/{encoded_key}` URL |
-| `results.streaming.master_playlist` | HLS master playlist object key in the media bucket | expose `/stream/{hash}/master.m3u8` |
+| `results.streaming.master_playlist` | HLS master playlist object key in the media bucket | expose `/stream/{hash}/master.m3u8` for video or `/stream/{hash}/hls/master.m3u8` for audio |
 | `results.encryption.key_endpoint` | already-public key endpoint URL | attach a Bearer token only when the player requests it |
 
 Two important consequences follow from this:
@@ -108,11 +108,11 @@ Use `/thumb` instead of exposing the storage key directly so delivery behavior s
 
 ### Pattern 3: unencrypted HLS playback
 
-For `video:transcode` or `video:full` without encryption:
+For audio HLS or for `video:transcode` / `video:full` without encryption:
 
 1. your app submits the job
 2. your app waits for `status=completed`
-3. your app exposes `/stream/{hash}/master.m3u8` to the player
+3. your app exposes the route that matches the result payload, typically `/stream/{hash}/master.m3u8` for video or `/stream/{hash}/hls/master.m3u8` for audio
 4. the player fetches playlists and segments from `/stream/{hash}/*`
 
 You do not need a Bearer token for this case.
@@ -137,7 +137,7 @@ Read next:
 
 Before calling your integration complete, verify all of the following:
 
-- your backend can create jobs with `X-API-Key`
+- your backend can create audio and video jobs with `X-API-Key`
 - your backend can sign `/img`, `/original`, and `/thumb` URLs with `HMAC_SECRET`
 - your frontend never sees `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET`
 - your player uses `/stream/{hash}/master.m3u8` as the public HLS entrypoint

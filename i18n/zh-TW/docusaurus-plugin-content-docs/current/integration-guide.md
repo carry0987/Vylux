@@ -42,7 +42,7 @@ Vylux 不負責：
 
 | Secret | 用途 | 應由誰持有 |
 | --- | --- | --- |
-| `API_KEY` | 內部 `/api/*` 管理端點，例如 `/api/jobs` | 只應在你的 backend 或內部工具中持有 |
+| `API_KEY` | 內部 `/api/*` 管理端點，例如 `/api/audio/jobs`、`/api/video/jobs`、`/api/jobs/{id}` | 只應在你的 backend 或內部工具中持有 |
 | `HMAC_SECRET` | 簽署 `/img`、`/original`、`/thumb` URL | 只應在你的 backend 或簽名服務中持有 |
 | `KEY_TOKEN_SECRET` | 簽署 `/api/key/{hash}` 的 Bearer token | 只應在你的 backend 或授權服務中持有 |
 
@@ -55,7 +55,7 @@ Vylux 不負責：
 | 即時 resize 或轉檔來源圖片 | `/img/{sig}/{opts}/{encoded_source}.{format}` | 使用 `HMAC_SECRET` 簽名 |
 | 受控地顯示或下載來源原檔 | `/original/{sig}/{encoded_key}` | 使用 `HMAC_SECRET` 簽名 |
 | 顯示已產生的縮圖、封面、preview 或其他 media-bucket 內圖片資產 | `/thumb/{sig}/{encoded_key}` | 使用 `HMAC_SECRET` 簽名，且 signing domain 要加 `thumb/` |
-| 播放 HLS | `/stream/{hash}/master.m3u8` | playlist 與 segment 請求本身不需要 auth header |
+| 播放 HLS | `/stream/{hash}/master.m3u8` 或 `/stream/{hash}/hls/master.m3u8` | playlist 與 segment 請求本身不需要 auth header |
 | 取得加密播放所需 content key | `/api/key/{hash}` 搭配 `Authorization: Bearer {token}` | token 用 `KEY_TOKEN_SECRET` 簽署 |
 
 ## job 結果如何變成對外 URL
@@ -69,7 +69,7 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 | 圖片類輸出的 `results.key` | media bucket 內的 object key | 簽一個 `/thumb/{sig}/{encoded_key}` URL |
 | `results.artifacts.cover.key` | media bucket 內生成的 cover key | 簽一個 `/thumb/{sig}/{encoded_key}` URL |
 | `results.artifacts.preview.key` | media bucket 內生成的 preview key | 簽一個 `/thumb/{sig}/{encoded_key}` URL |
-| `results.streaming.master_playlist` | media bucket 內 HLS master playlist 的 object key | 對外公開 `/stream/{hash}/master.m3u8` |
+| `results.streaming.master_playlist` | media bucket 內 HLS master playlist 的 object key | 影片對外公開 `/stream/{hash}/master.m3u8`，音訊對外公開 `/stream/{hash}/hls/master.m3u8` |
 | `results.encryption.key_endpoint` | 已經是對外的 key endpoint URL | 僅在播放器請求它時附上 Bearer token |
 
 這裡有兩個容易混淆的重點：
@@ -108,11 +108,11 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 
 ### 模式 3：未加密 HLS 播放
 
-對未加密的 `video:transcode` 或 `video:full`：
+對音訊 HLS，或對未加密的 `video:transcode` / `video:full`：
 
 1. 你的應用送出 job
 2. 等待 `status=completed`
-3. 對外公開 `/stream/{hash}/master.m3u8`
+3. 依 job 結果對外公開播放入口：影片通常是 `/stream/{hash}/master.m3u8`，音訊通常是 `/stream/{hash}/hls/master.m3u8`
 4. 播放器會繼續抓 `/stream/{hash}/*` 下的 playlist 與 segments
 
 這種情況不需要 Bearer token。
@@ -122,7 +122,7 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 對有開啟加密的 `video:transcode` 或 `video:full`：
 
 1. 你的應用送出 job 並等待完成
-2. 對外公開 `/stream/{hash}/master.m3u8`
+2. 依結果類型對外公開播放入口：影片通常是 `/stream/{hash}/master.m3u8`，音訊通常是 `/stream/{hash}/hls/master.m3u8`
 3. 你的應用產生一個 payload 內含同一個 media `hash` 的 Bearer token
 4. 播放器只在 `/api/key/{hash}` 請求上附 `Authorization: Bearer {token}`
 
@@ -137,10 +137,10 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 
 若你要判斷整合是否完整，至少確認：
 
-- backend 可以帶 `X-API-Key` 建立 jobs
+- backend 可以帶 `X-API-Key` 建立 audio 與 video jobs
 - backend 可以用 `HMAC_SECRET` 簽 `/img`、`/original`、`/thumb`
 - 前端永遠看不到 `API_KEY`、`HMAC_SECRET`、`KEY_TOKEN_SECRET`
-- HLS 播放入口使用 `/stream/{hash}/master.m3u8`
+- HLS 播放入口會依媒體種類不同而不同：影片通常是 `/stream/{hash}/master.m3u8`，音訊通常是 `/stream/{hash}/hls/master.m3u8`
 - 加密播放只對 `/api/key/{hash}` 附 `Authorization` header
 
 ## 接下來看哪裡
