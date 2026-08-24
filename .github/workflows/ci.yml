@@ -2,12 +2,11 @@ name: CI
 
 on:
   pull_request:
-  push:
     branches: [main, master]
   workflow_dispatch:
 
 env:
-  LIBVIPS_VERSION: 8.18.2
+  LIBVIPS_VERSION: 8.18.5
 
 permissions:
   contents: read

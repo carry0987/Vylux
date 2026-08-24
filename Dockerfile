@@ -1,5 +1,5 @@
 # --- Build ---
-FROM golang:1.26-alpine AS builder
+FROM golang:1.27-alpine AS builder
 
 ARG VERSION=dev
 ARG COMMIT=unknown
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=1 go build \
 FROM alpine:edge
 
 ARG TARGETARCH
-ARG SHAKA_PACKAGER_VERSION=v3.9.2
+ARG SHAKA_PACKAGER_VERSION=v3.9.3
 
 RUN apk add --no-cache \
     vips \
