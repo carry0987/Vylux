@@ -142,7 +142,12 @@ func (s *Server) registerRoutes() {
 		s.cfg.MaxFileSize,
 	)
 	api := s.echo.Group("/api", custommw.APIKeyAuth(s.cfg.APIKey))
-	api.POST("/jobs", jobHandler.Create,
+	api.POST("/audio/jobs", jobHandler.CreateAudio,
+		custommw.RedisRateLimit(s.deps.Redis, "jobs", 30, time.Minute, func(c *echo.Context) string {
+			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))
+		}),
+	)
+	api.POST("/video/jobs", jobHandler.CreateVideo,
 		custommw.RedisRateLimit(s.deps.Redis, "jobs", 30, time.Minute, func(c *echo.Context) string {
 			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))
 		}),

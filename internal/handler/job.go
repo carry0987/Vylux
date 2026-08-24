@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,11 +10,13 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"net/url"
 	"strings"
 
+	"Vylux/internal/audio"
 	"Vylux/internal/db/dbq"
+	jobrequest "Vylux/internal/job/request"
 	"Vylux/internal/jobflow"
+	"Vylux/internal/jsonx"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
 	apptracing "Vylux/internal/tracing"
@@ -27,7 +28,7 @@ import (
 
 // ── Request / Response DTOs ──
 
-// JobRequest is the incoming JSON body for POST /api/jobs.
+// JobRequest is the normalized internal job-create shape used after route-specific decoding.
 type JobRequest struct {
 	Type        string         `json:"type"`
 	Hash        string         `json:"hash"`
@@ -75,7 +76,7 @@ type RetryJobInfo struct {
 
 // ── Handler ──
 
-// JobHandler handles asynchronous job creation and status queries.
+// JobHandler handles domain-specific job creation plus shared job lifecycle queries.
 type JobHandler struct {
 	queries        *dbq.Queries
 	queueClient    *queue.Client
@@ -118,20 +119,27 @@ func NewJobHandler(
 	}
 }
 
-// Create handles POST /api/jobs.
-//
-// Flow:
-//  1. Validate request
-//  2. Idempotency check — if a non-failed job exists for the same request fingerprint, return it
-//  3. Enqueue task via asynq
-//  4. Persist job row in DB
-//  5. Return 202 Accepted
-func (h *JobHandler) Create(c *echo.Context) error {
-	req, err := decodeJobRequest(c)
+// CreateAudio handles POST /api/audio/jobs.
+func (h *JobHandler) CreateAudio(c *echo.Context) error {
+	req, err := decodeAudioJobRequest(c)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid JSON body")
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
+	return h.createRequest(c, req)
+}
+
+// CreateVideo handles POST /api/video/jobs.
+func (h *JobHandler) CreateVideo(c *echo.Context) error {
+	req, err := decodeVideoJobRequest(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return h.createRequest(c, req)
+}
+
+func (h *JobHandler) createRequest(c *echo.Context, req JobRequest) error {
 	if err := validateJobRequest(&req); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
@@ -180,7 +188,7 @@ func (h *JobHandler) Create(c *echo.Context) error {
 	})
 }
 
-// GetStatus handles GET /api/jobs/:id.
+// GetStatus handles the shared GET /api/jobs/:id lifecycle endpoint.
 func (h *JobHandler) GetStatus(c *echo.Context) error {
 	jobID := c.Param("id")
 	if jobID == "" {
@@ -219,7 +227,7 @@ func (h *JobHandler) GetStatus(c *echo.Context) error {
 	return c.JSON(http.StatusOK, resp)
 }
 
-// Retry handles POST /api/jobs/:id/retry.
+// Retry handles the shared POST /api/jobs/:id/retry lifecycle endpoint.
 func (h *JobHandler) Retry(c *echo.Context) error {
 	jobID := c.Param("id")
 	if jobID == "" {
@@ -277,192 +285,92 @@ func (h *JobHandler) Retry(c *echo.Context) error {
 
 // ── Private helpers ──
 
-// validJobTypes lists accepted values for the "type" field.
-var validJobTypes = map[string]bool{
-	queue.TypeImageThumbnail: true,
-	queue.TypeVideoCover:     true,
-	queue.TypeVideoPreview:   true,
-	queue.TypeVideoTranscode: true,
-	queue.TypeVideoFull:      true,
-}
-
 func validateJobRequest(r *JobRequest) error {
-	if !validJobTypes[r.Type] {
-		return fmt.Errorf("unsupported job type: %q", r.Type)
-	}
-	if r.Hash == "" {
-		return fmt.Errorf("hash is required")
-	}
-	if r.Source == "" {
-		return fmt.Errorf("source is required")
-	}
-	if err := validateCallbackURL(r.CallbackURL); err != nil {
-		return err
-	}
-	if err := validateJobOptions(r.Type, r.Options); err != nil {
-		return err
-	}
-	return nil
+	return jobrequest.Validate(toNormalizedRequest(*r))
 }
 
-func validateCallbackURL(raw string) error {
-	if raw == "" {
-		return nil
-	}
-
-	u, err := url.Parse(raw)
+func decodeAudioJobRequest(c *echo.Context) (JobRequest, error) {
+	normalized, err := jobrequest.DecodeAudioCreate(c.Request().Body)
 	if err != nil {
-		return fmt.Errorf("callback_url must be a valid URL: %w", err)
-	}
-
-	switch strings.ToLower(u.Scheme) {
-	case "http", "https":
-	default:
-		return fmt.Errorf("callback_url must use http:// or https://")
-	}
-
-	if u.Host == "" {
-		return fmt.Errorf("callback_url must include a host")
-	}
-
-	return nil
-}
-
-func validateJobOptions(jobType string, opts map[string]any) error {
-	switch jobType {
-	case queue.TypeVideoCover:
-		_, err := parseVideoCoverOptions(opts)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-	case queue.TypeVideoPreview:
-		_, err := parseVideoPreviewOptions(opts)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-	case queue.TypeVideoTranscode:
-		_, err := parseVideoTranscodeOptions(opts)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-	case queue.TypeVideoFull:
-		_, err := parseVideoFullOptions(opts)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-	}
-	return nil
-}
-
-func decodeJobRequest(c *echo.Context) (JobRequest, error) {
-	var req JobRequest
-	dec := json.NewDecoder(c.Request().Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
 		return JobRequest{}, err
 	}
 
-	return req, nil
+	return JobRequest{
+		Type:        normalized.Type,
+		Hash:        normalized.Hash,
+		Source:      normalized.Source,
+		Options:     normalized.Options,
+		CallbackURL: normalized.CallbackURL,
+	}, nil
+}
+
+func decodeVideoJobRequest(c *echo.Context) (JobRequest, error) {
+	normalized, err := jobrequest.DecodeVideoCreate(c.Request().Body)
+	if err != nil {
+		return JobRequest{}, err
+	}
+
+	return JobRequest{
+		Type:        normalized.Type,
+		Hash:        normalized.Hash,
+		Source:      normalized.Source,
+		Options:     normalized.Options,
+		CallbackURL: normalized.CallbackURL,
+	}, nil
 }
 
 func canonicalizeJobRequest(r *JobRequest) error {
-	if r.Options == nil {
-		r.Options = map[string]any{}
+	normalized := toNormalizedRequest(*r)
+	if err := jobrequest.Canonicalize(&normalized); err != nil {
+		return err
 	}
-
-	switch r.Type {
-	case queue.TypeVideoCover:
-		parsed, err := parseVideoCoverOptions(r.Options)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-		canonical, err := structToOptionsMap(parsed)
-		if err != nil {
-			return fmt.Errorf("canonicalize options: %w", err)
-		}
-		r.Options = canonical
-	case queue.TypeVideoPreview:
-		parsed, err := parseVideoPreviewOptions(r.Options)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-		canonical, err := structToOptionsMap(parsed)
-		if err != nil {
-			return fmt.Errorf("canonicalize options: %w", err)
-		}
-		r.Options = canonical
-	case queue.TypeVideoTranscode:
-		parsed, err := parseVideoTranscodeOptions(r.Options)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-		canonical, err := structToOptionsMap(parsed)
-		if err != nil {
-			return fmt.Errorf("canonicalize options: %w", err)
-		}
-		r.Options = canonical
-	case queue.TypeVideoFull:
-		parsed, err := parseVideoFullOptions(r.Options)
-		if err != nil {
-			return fmt.Errorf("invalid options: %w", err)
-		}
-		canonicalizeVideoFullOptions(&parsed)
-		canonical, err := structToOptionsMap(parsed)
-		if err != nil {
-			return fmt.Errorf("canonicalize options: %w", err)
-		}
-		r.Options = canonical
-	}
-
+	applyNormalizedRequest(r, normalized)
 	return nil
 }
 
+func toNormalizedRequest(r JobRequest) jobrequest.Normalized {
+	return jobrequest.Normalized{
+		Type:        r.Type,
+		Hash:        r.Hash,
+		Source:      r.Source,
+		Options:     r.Options,
+		CallbackURL: r.CallbackURL,
+	}
+}
+
+func applyNormalizedRequest(dst *JobRequest, src jobrequest.Normalized) {
+	if dst == nil {
+		return
+	}
+	dst.Type = src.Type
+	dst.Hash = src.Hash
+	dst.Source = src.Source
+	dst.Options = src.Options
+	dst.CallbackURL = src.CallbackURL
+}
+
 func parseVideoCoverOptions(opts map[string]any) (queue.VideoCoverOptions, error) {
-	return decodeOptionsStrict[queue.VideoCoverOptions](opts)
+	return jsonx.StrictCodec.DecodeStrict[queue.VideoCoverOptions](opts)
+}
+
+func parseAudioTranscodeOptions(opts map[string]any) (queue.AudioTranscodeOptions, error) {
+	return jsonx.StrictCodec.DecodeStrict[queue.AudioTranscodeOptions](opts)
 }
 
 func parseVideoPreviewOptions(opts map[string]any) (queue.VideoPreviewOptions, error) {
-	return decodeOptionsStrict[queue.VideoPreviewOptions](opts)
+	return jsonx.StrictCodec.DecodeStrict[queue.VideoPreviewOptions](opts)
 }
 
 func parseVideoTranscodeOptions(opts map[string]any) (queue.VideoTranscodeOptions, error) {
-	return decodeOptionsStrict[queue.VideoTranscodeOptions](opts)
+	return jsonx.StrictCodec.DecodeStrict[queue.VideoTranscodeOptions](opts)
 }
 
 func parseVideoFullOptions(opts map[string]any) (queue.VideoFullOptions, error) {
-	return decodeOptionsStrict[queue.VideoFullOptions](opts)
-}
-
-func decodeOptionsStrict[T any](opts map[string]any) (T, error) {
-	var decoded T
-	if opts == nil {
-		return decoded, nil
-	}
-	data, err := json.Marshal(opts)
-	if err != nil {
-		return decoded, err
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&decoded); err != nil {
-		return decoded, err
-	}
-	return decoded, nil
+	return jsonx.StrictCodec.DecodeStrict[queue.VideoFullOptions](opts)
 }
 
 func structToOptionsMap[T any](opts T) (map[string]any, error) {
-	data, err := json.Marshal(opts)
-	if err != nil {
-		return nil, err
-	}
-	var out map[string]any
-	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
-	}
-	if out == nil {
-		out = map[string]any{}
-	}
-	return out, nil
+	return jsonx.StrictCodec.ToMap(opts)
 }
 
 func canonicalizeVideoFullOptions(opts *queue.VideoFullOptions) {
@@ -477,6 +385,30 @@ func canonicalizeVideoFullOptions(opts *queue.VideoFullOptions) {
 	}
 	if opts.Transcode != nil && *opts.Transcode == (queue.VideoTranscodeOptions{}) {
 		opts.Transcode = nil
+	}
+}
+
+func canonicalizeAudioTranscodeOptions(opts *queue.AudioTranscodeOptions) {
+	if opts == nil {
+		return
+	}
+	if !opts.HLS && !opts.MP3 && !opts.FLAC && !opts.Waveform {
+		opts.HLS = true
+		opts.MP3 = true
+		opts.FLAC = true
+		opts.Waveform = true
+	}
+	if opts.Waveform && opts.WaveformBins <= 0 {
+		opts.WaveformBins = audio.DefaultWaveformBins
+	}
+	if !opts.Waveform {
+		opts.WaveformBins = 0
+	}
+	if opts.MP3 && strings.TrimSpace(opts.MP3Bitrate) == "" {
+		opts.MP3Bitrate = "320k"
+	}
+	if !opts.MP3 {
+		opts.MP3Bitrate = ""
 	}
 }
 
@@ -679,7 +611,7 @@ func cloneOptions(opts map[string]any) map[string]any {
 
 func (h *JobHandler) sourceSizeForRequest(ctx context.Context, req JobRequest) (int64, error) {
 	switch req.Type {
-	case queue.TypeVideoTranscode, queue.TypeVideoFull:
+	case queue.TypeAudioTranscode, queue.TypeVideoTranscode, queue.TypeVideoFull:
 	default:
 		return 0, nil
 	}
@@ -725,6 +657,30 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			CallbackURL:  req.CallbackURL,
 		}
 		info, err := h.queueClient.EnqueueImageThumbnail(ctx, &payload)
+		if err != nil {
+			return nil, err
+		}
+		return &taskInfoCompat{ID: info.ID, Queue: info.Queue}, nil
+
+	case queue.TypeAudioTranscode:
+		options, err := parseAudioTranscodeOptions(req.Options)
+		if err != nil {
+			return nil, err
+		}
+		canonicalizeAudioTranscodeOptions(&options)
+		payload := queue.AudioTranscodePayload{
+			TraceCarrier: traceCarrier,
+			Hash:         req.Hash,
+			Source:       req.Source,
+			HLS:          options.HLS,
+			MP3:          options.MP3,
+			FLAC:         options.FLAC,
+			Waveform:     options.Waveform,
+			WaveformBins: options.WaveformBins,
+			MP3Bitrate:   options.MP3Bitrate,
+			CallbackURL:  req.CallbackURL,
+		}
+		info, err := h.queueClient.EnqueueAudioTranscode(ctx, &payload, sourceSize, h.largeThreshold)
 		if err != nil {
 			return nil, err
 		}
