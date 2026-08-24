@@ -38,6 +38,43 @@ func TestTaskConstructors_JSONShape(t *testing.T) {
 			wantPresent: []string{"hash", "source", "outputs", "callback_url"},
 		},
 		{
+			name:     "audio transcode omits disabled outputs and empty bitrate",
+			wantType: TypeAudioTranscode,
+			build: func(t *testing.T) *asynq.Task {
+				t.Helper()
+				task, err := NewAudioTranscodeTask(&AudioTranscodePayload{
+					Hash:        "hash",
+					Source:      "source.flac",
+					CallbackURL: "https://example.com/callback",
+				})
+				if err != nil {
+					t.Fatalf("NewAudioTranscodeTask returned error: %v", err)
+				}
+				return task
+			},
+			wantPresent: []string{"hash", "source", "callback_url"},
+			wantAbsent:  []string{"hls", "mp3", "flac", "waveform", "waveform_bins", "mp3_bitrate"},
+		},
+		{
+			name:     "audio transcode includes waveform fields when enabled",
+			wantType: TypeAudioTranscode,
+			build: func(t *testing.T) *asynq.Task {
+				t.Helper()
+				task, err := NewAudioTranscodeTask(&AudioTranscodePayload{
+					Hash:         "hash",
+					Source:       "source.flac",
+					Waveform:     true,
+					WaveformBins: 1024,
+					CallbackURL:  "https://example.com/callback",
+				})
+				if err != nil {
+					t.Fatalf("NewAudioTranscodeTask returned error: %v", err)
+				}
+				return task
+			},
+			wantPresent: []string{"hash", "source", "waveform", "waveform_bins", "callback_url"},
+		},
+		{
 			name:     "video cover omits zero timestamp",
 			wantType: TypeVideoCover,
 			build: func(t *testing.T) *asynq.Task {

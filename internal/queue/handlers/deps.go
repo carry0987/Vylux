@@ -63,6 +63,15 @@ func videoS3Key(hash, relPath string) string {
 	return "videos/" + prefix + "/" + hash + "/" + relPath
 }
 
+// audioS3Key builds the S3 object key for an audio asset.
+func audioS3Key(hash, relPath string) string {
+	prefix := hash
+	if len(hash) >= 2 {
+		prefix = hash[:2]
+	}
+	return "audio/" + prefix + "/" + hash + "/" + relPath
+}
+
 // ── I/O helpers ──
 
 func startWorkerSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
@@ -182,6 +191,29 @@ func uploadBytes(ctx context.Context, store storage.Storage, bucket, key, conten
 	return err
 }
 
+// uploadFile writes a local file to S3.
+func uploadFile(ctx context.Context, store storage.Storage, bucket, key, contentType, filePath string) error {
+	ctx, span := startWorkerSpan(ctx, "worker.upload.file",
+		attribute.String("storage.role", "media"),
+		attribute.String("storage.bucket", bucket),
+		attribute.String("storage.key", key),
+		attribute.String("storage.content_type", contentType),
+		attribute.String("file.path", filePath),
+	)
+	defer span.End()
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		recordSpanError(span, err)
+		return fmt.Errorf("open %s: %w", filePath, err)
+	}
+	defer file.Close()
+
+	err = store.Put(ctx, bucket, key, file, contentType)
+	recordSpanError(span, err)
+	return err
+}
+
 // uploadHLSDir walks outDir and uploads all HLS files to S3.
 func uploadHLSDir(ctx context.Context, store storage.Storage, bucket, hash, outDir string) ([]string, error) {
 	ctx, span := startWorkerSpan(ctx, "worker.upload.hls_dir",
@@ -256,6 +288,20 @@ func imageMimeType(format string) string {
 		return "image/jpeg"
 	case "png":
 		return "image/png"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// audioMimeType returns the MIME type for an audio format string.
+func audioMimeType(format string) string {
+	switch strings.ToLower(format) {
+	case "aac", "m4a", "mp4":
+		return "audio/mp4"
+	case "flac":
+		return "audio/flac"
+	case "mp3":
+		return "audio/mpeg"
 	default:
 		return "application/octet-stream"
 	}

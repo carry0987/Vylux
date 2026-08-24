@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"Vylux/internal/audio"
 	"Vylux/internal/cache"
 	"Vylux/internal/config"
 	"Vylux/internal/db"
@@ -81,7 +82,11 @@ func main() {
 	printBanner(cfg)
 
 	video.SetFFmpegPath(cfg.FFmpegPath)
+	video.SetFFprobePath(cfg.FFprobePath)
 	video.SetPackagerPath(cfg.ShakaPackagerPath)
+	audio.SetFFmpegPath(cfg.FFmpegPath)
+	audio.SetFFprobePath(cfg.FFprobePath)
+	audio.SetPackagerPath(cfg.ShakaPackagerPath)
 
 	if err := run(cfg); err != nil {
 		slog.Error("fatal error", "error", err)
@@ -289,6 +294,7 @@ func runAll(ctx context.Context, cfg *config.Config, deps *server.Deps, workerDe
 // Individual handler implementations live in internal/queue/handlers/.
 func registerHandlers(wrk *queue.Server, d *handlers.Deps) {
 	wrk.HandleFunc(queue.TypeImageThumbnail, handlers.HandleImageThumbnail(d))
+	wrk.HandleFunc(queue.TypeAudioTranscode, handlers.HandleAudioTranscode(d))
 	wrk.HandleFunc(queue.TypeVideoCover, handlers.HandleVideoCover(d))
 	wrk.HandleFunc(queue.TypeVideoPreview, handlers.HandleVideoPreview(d))
 	wrk.HandleFunc(queue.TypeVideoTranscode, handlers.HandleVideoTranscode(d))

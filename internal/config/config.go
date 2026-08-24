@@ -57,6 +57,7 @@ type Config struct {
 
 	// FFmpeg
 	FFmpegPath        string `env:"FFMPEG_PATH" envDefault:"ffmpeg"`
+	FFprobePath       string `env:"FFPROBE_PATH" envDefault:"ffprobe"`
 	ShakaPackagerPath string `env:"SHAKA_PACKAGER_PATH" envDefault:"packager"`
 
 	// Timeouts

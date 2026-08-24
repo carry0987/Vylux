@@ -18,7 +18,7 @@ import (
 //
 // Routes:
 //
-//	GET /stream/:hash/*  →  S3: videos/{hash_prefix}/{hash}/{path}
+//	GET /stream/:hash/*  →  S3: videos/{hash_prefix}/{hash}/{path} or audio/{hash_prefix}/{hash}/{path}
 type StreamHandler struct {
 	mediaStore  storage.Storage
 	mediaBucket string
@@ -58,12 +58,27 @@ func (h *StreamHandler) Handle(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "unsupported file type")
 	}
 
-	// Build S3 key: videos/{hash_prefix}/{hash}/{filePath}
-	s3Key := videoS3Key(hash, filePath)
+	keys := []string{videoS3Key(hash, filePath), audioS3Key(hash, filePath)}
 
-	rc, err := h.mediaStore.Get(c.Request().Context(), h.mediaBucket, s3Key)
-	if err != nil {
-		slog.Warn("stream fetch failed", apptracing.LogFields(c.Request().Context(), "key", s3Key, "error", err)...)
+	var (
+		rc    io.ReadCloser
+		err   error
+		s3Key string
+	)
+	for _, candidate := range keys {
+		rc, err = h.mediaStore.Get(c.Request().Context(), h.mediaBucket, candidate)
+		if err == nil {
+			s3Key = candidate
+			break
+		}
+		if storage.IsNotFound(err) {
+			continue
+		}
+		slog.Warn("stream fetch failed", apptracing.LogFields(c.Request().Context(), "key", candidate, "error", err)...)
+		return echo.NewHTTPError(http.StatusNotFound, "not found")
+	}
+	if rc == nil {
+		slog.Warn("stream fetch failed", apptracing.LogFields(c.Request().Context(), "hash", hash, "path", filePath, "error", "not found")...)
 		return echo.NewHTTPError(http.StatusNotFound, "not found")
 	}
 	defer rc.Close()
@@ -92,6 +107,14 @@ func videoS3Key(hash, filePath string) string {
 		prefix = hash[:2]
 	}
 	return "videos/" + prefix + "/" + hash + "/" + filePath
+}
+
+func audioS3Key(hash, filePath string) string {
+	prefix := hash
+	if len(hash) >= 2 {
+		prefix = hash[:2]
+	}
+	return "audio/" + prefix + "/" + hash + "/" + filePath
 }
 
 // hlsContentType returns the MIME type for an HLS-related file extension.
