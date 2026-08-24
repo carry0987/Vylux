@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"Vylux/internal/db/dbq"
-	"Vylux/internal/handler"
 	"Vylux/internal/signature"
 )
 
@@ -22,18 +21,29 @@ func TestCleanup_DeleteMedia(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, cfg, cleanup := newTestServer(t)
+	ts, cfg, store, cleanup := newTestServerWithStore(t)
 	defer cleanup()
+	if err := store.Put(t.Context(), cfg.SourceBucket, "uploads/cleanup.mp4", bytes.NewReader([]byte("video")), "video/mp4"); err != nil {
+		t.Fatalf("upload source fixture: %v", err)
+	}
 
-	body := handler.JobRequest{
-		Type:        "image:thumbnail",
-		Hash:        "cleanup-test-hash",
-		Source:      "uploads/test.jpg",
-		CallbackURL: "http://example.com/callback",
+	body := map[string]any{
+		"source": map[string]any{
+			"hash": "cleanup-test-hash",
+			"key":  "uploads/cleanup.mp4",
+		},
+		"pipeline": map[string]any{
+			"package": map[string]any{
+				"hls": map[string]any{"enabled": true, "profile": "stream_video_standard"},
+			},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
+		},
 	}
 	jsonBody, _ := json.Marshal(body)
 
-	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/jobs", bytes.NewReader(jsonBody))
+	createReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/video/jobs", bytes.NewReader(jsonBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createReq.Header.Set("X-API-Key", cfg.APIKey)
 
@@ -43,7 +53,7 @@ func TestCleanup_DeleteMedia(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	delReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/media/"+body.Hash, nil)
+	delReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/media/cleanup-test-hash", nil)
 	delReq.Header.Set("X-API-Key", cfg.APIKey)
 
 	delResp, err := http.DefaultClient.Do(delReq)
@@ -58,7 +68,7 @@ func TestCleanup_DeleteMedia(t *testing.T) {
 	}
 
 	// Verify deletion is idempotent (second DELETE should also return 204).
-	delReq2, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/media/"+body.Hash, nil)
+	delReq2, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/media/cleanup-test-hash", nil)
 	delReq2.Header.Set("X-API-Key", cfg.APIKey)
 
 	delResp2, err := http.DefaultClient.Do(delReq2)
