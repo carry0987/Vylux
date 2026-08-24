@@ -16,8 +16,10 @@ import (
 )
 
 type fakeStore struct {
-	objects map[string][]byte
-	deleted []string
+	objects        map[string][]byte
+	deleted        []string
+	listErr        error
+	deleteErrByKey map[string]error
 }
 
 func (s *fakeStore) Get(_ context.Context, _, key string) (io.ReadCloser, error) {
@@ -55,12 +57,18 @@ func (s *fakeStore) Size(_ context.Context, _, key string) (int64, error) {
 }
 
 func (s *fakeStore) Delete(_ context.Context, _, key string) error {
+	if err := s.deleteErrByKey[key]; err != nil {
+		return err
+	}
 	delete(s.objects, key)
 	s.deleted = append(s.deleted, key)
 	return nil
 }
 
 func (s *fakeStore) List(_ context.Context, _, prefix string) ([]string, error) {
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
 	var keys []string
 	for key := range s.objects {
 		if strings.HasPrefix(key, prefix) {
@@ -77,6 +85,11 @@ func (s *fakeStore) HeadBucket(context.Context, string) error {
 type fakeQueries struct {
 	jobs              []dbq.Job
 	cacheEntries      []dbq.ImageCacheEntry
+	listJobsErr       error
+	listCacheErr      error
+	deleteKeyErr      error
+	deleteJobsErr     error
+	deleteCacheErr    error
 	deletedJobsHash   string
 	deletedKeysHash   string
 	deletedCacheHash  string
@@ -84,25 +97,40 @@ type fakeQueries struct {
 }
 
 func (q *fakeQueries) ListJobsByHash(context.Context, string) ([]dbq.Job, error) {
+	if q.listJobsErr != nil {
+		return nil, q.listJobsErr
+	}
 	return q.jobs, nil
 }
 
 func (q *fakeQueries) DeleteEncryptionKey(_ context.Context, hash string) error {
+	if q.deleteKeyErr != nil {
+		return q.deleteKeyErr
+	}
 	q.deletedKeysHash = hash
 	return nil
 }
 
 func (q *fakeQueries) DeleteJobsByHash(_ context.Context, hash string) error {
+	if q.deleteJobsErr != nil {
+		return q.deleteJobsErr
+	}
 	q.deletedJobsHash = hash
 	return nil
 }
 
 func (q *fakeQueries) ListImageCacheEntriesByHash(_ context.Context, hash string) ([]dbq.ImageCacheEntry, error) {
+	if q.listCacheErr != nil {
+		return nil, q.listCacheErr
+	}
 	q.listedCacheHashes = append(q.listedCacheHashes, hash)
 	return q.cacheEntries, nil
 }
 
 func (q *fakeQueries) DeleteImageCacheEntriesByHash(_ context.Context, hash string) error {
+	if q.deleteCacheErr != nil {
+		return q.deleteCacheErr
+	}
 	q.deletedCacheHash = hash
 	q.cacheEntries = nil
 	return nil
@@ -192,7 +220,10 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	}}
 
 	cleaner := NewCleaner(store, lru, queries, inspector, "media")
-	cleaner.Cleanup(ctx, hash)
+	result := cleaner.Cleanup(ctx, hash)
+	if !result.ConfirmedGone() {
+		t.Fatalf("expected cleanup to confirm media is gone, got %#v", result)
+	}
 
 	if _, ok := lru.Get(trackedCacheKey); ok {
 		t.Fatal("expected tracked LRU entry to be removed")
@@ -223,5 +254,50 @@ func TestCleanerCleanupDeletesTrackedCachesAndCancelableTasks(t *testing.T) {
 	}
 	if _, err := inspector.GetTaskInfo(queue.QueueDefault, "active-task"); !errors.Is(err, asynq.ErrTaskNotFound) {
 		t.Fatalf("expected active task to be deleted after cancellation, got %v", err)
+	}
+}
+
+func TestCleanerCleanupStopsBeforeMetadataDeletionWhenMediaDeleteFails(t *testing.T) {
+	ctx := context.Background()
+	hash := strings.Repeat("b", 64)
+	mediaKey := s3PrefixForHash(hash, "videos") + "master.m3u8"
+	store := &fakeStore{
+		objects:        map[string][]byte{mediaKey: []byte("playlist")},
+		deleteErrByKey: map[string]error{mediaKey: errors.New("s3 unavailable")},
+	}
+	queries := &fakeQueries{}
+	cleaner := NewCleaner(store, cache.New(1024), queries, nil, "media")
+
+	result := cleaner.Cleanup(ctx, hash)
+	if result.ConfirmedGone() {
+		t.Fatalf("expected cleanup to be incomplete, got %#v", result)
+	}
+	if result.MediaObjects.Status != "failed" {
+		t.Fatalf("media objects status = %q, want failed", result.MediaObjects.Status)
+	}
+	if queries.deletedKeysHash != "" {
+		t.Fatalf("expected encryption key deletion to be skipped, got %q", queries.deletedKeysHash)
+	}
+	if queries.deletedJobsHash != "" {
+		t.Fatalf("expected job deletion to be skipped, got %q", queries.deletedJobsHash)
+	}
+}
+
+func TestCleanerCleanupTreatsMetadataFailureAsWarning(t *testing.T) {
+	ctx := context.Background()
+	hash := strings.Repeat("c", 64)
+	store := &fakeStore{}
+	queries := &fakeQueries{deleteKeyErr: errors.New("db unavailable")}
+	cleaner := NewCleaner(store, cache.New(1024), queries, nil, "media")
+
+	result := cleaner.Cleanup(ctx, hash)
+	if !result.ConfirmedGone() {
+		t.Fatalf("expected cleanup to confirm media is gone, got %#v", result)
+	}
+	if !result.HasWarnings() {
+		t.Fatalf("expected warning result, got %#v", result)
+	}
+	if result.EncryptionKey.Status != "failed" {
+		t.Fatalf("encryption key status = %q, want failed", result.EncryptionKey.Status)
 	}
 }
