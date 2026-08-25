@@ -9,7 +9,7 @@ import (
 
 func TestDecodeStructuredAudioProcess(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -75,7 +75,7 @@ func TestDecodeAudioCreate(t *testing.T) {
 
 func TestDecodeAudioCreateRejectsStructuredJobDiscriminatorFields(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"}
 	}`
@@ -113,7 +113,7 @@ func TestDecodeVideoCreate(t *testing.T) {
 
 func TestDecodeVideoCreateRejectsStructuredJobDiscriminatorFields(t *testing.T) {
 	body := `{
-		"media_kind":"video",
+		"asset_type":"video",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/video.mp4"}
 	}`
@@ -183,24 +183,24 @@ func TestCanonicalizeVideoFullDropsEmptyStages(t *testing.T) {
 	}
 }
 
-func TestDecodeRejectsStructuredLegacyMix(t *testing.T) {
+func TestDecodeRejectsMixedStructuredAndDeprecatedFields(t *testing.T) {
 	body := `{
 		"type":"audio:transcode",
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"}
 	}`
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected structured/legacy mix to be rejected")
+		t.Fatal("expected mixed structured and deprecated fields to be rejected")
 	}
-	if !strings.Contains(err.Error(), "structured requests cannot include legacy") {
+	if !strings.Contains(err.Error(), "structured requests cannot include type/hash/options/callback_url fields") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestDecodeRejectsLegacyAudioRequest(t *testing.T) {
+func TestDecodeRejectsUnstructuredRequest(t *testing.T) {
 	body := `{
 		"type":"audio:transcode",
 		"hash":"hash123",
@@ -209,16 +209,16 @@ func TestDecodeRejectsLegacyAudioRequest(t *testing.T) {
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected legacy audio request to be rejected")
+		t.Fatal("expected unstructured request to be rejected")
 	}
-	if !strings.Contains(err.Error(), "use POST /api/audio/jobs") {
+	if !strings.Contains(err.Error(), "job requests must use the structured asset_type/operation contract") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestDecodeStructuredAudioProcessDownloadProfiles(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -241,9 +241,9 @@ func TestDecodeStructuredAudioProcessDownloadProfiles(t *testing.T) {
 	}
 }
 
-func TestDecodeStructuredAudioProcessRejectsLegacyFlacProfileName(t *testing.T) {
+func TestDecodeStructuredAudioProcessRejectsUnsupportedFlacProfileName(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -253,7 +253,7 @@ func TestDecodeStructuredAudioProcessRejectsLegacyFlacProfileName(t *testing.T) 
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected legacy flac profile name to be rejected")
+		t.Fatal("expected unsupported flac profile name to be rejected")
 	}
 	if !strings.Contains(err.Error(), "unsupported pipeline.downloads profile") {
 		t.Fatalf("unexpected error: %v", err)
@@ -262,7 +262,7 @@ func TestDecodeStructuredAudioProcessRejectsLegacyFlacProfileName(t *testing.T) 
 
 func TestDecodeStructuredAudioProcessRejectsUnknownWaveformProfile(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -281,7 +281,7 @@ func TestDecodeStructuredAudioProcessRejectsUnknownWaveformProfile(t *testing.T)
 
 func TestDecodeStructuredAudioProcessRejectsProfileFormatConflict(t *testing.T) {
 	body := `{
-		"media_kind":"audio",
+		"asset_type":"audio",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -300,7 +300,7 @@ func TestDecodeStructuredAudioProcessRejectsProfileFormatConflict(t *testing.T) 
 
 func TestDecodeStructuredVideoProcessDefaultsToVideoFull(t *testing.T) {
 	body := `{
-		"media_kind":"video",
+		"asset_type":"video",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/video.mp4"}
 	}`
@@ -319,7 +319,7 @@ func TestDecodeStructuredVideoProcessDefaultsToVideoFull(t *testing.T) {
 
 func TestDecodeStructuredVideoProcessHLSPackageOnly(t *testing.T) {
 	body := `{
-		"media_kind":"video",
+		"asset_type":"video",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/video.mp4"},
 		"pipeline":{"package":{"hls":{"enabled":true,"profile":"stream_video_standard","encryption":{"enabled":true}}}}
@@ -339,7 +339,7 @@ func TestDecodeStructuredVideoProcessHLSPackageOnly(t *testing.T) {
 
 func TestDecodeStructuredVideoProcessRejectsUnsupportedDeliverableCombination(t *testing.T) {
 	body := `{
-		"media_kind":"video",
+		"asset_type":"video",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/video.mp4"},
 		"pipeline":{"cover":{"enabled":true},"package":{"hls":{"enabled":true}}}
@@ -356,7 +356,7 @@ func TestDecodeStructuredVideoProcessRejectsUnsupportedDeliverableCombination(t 
 
 func TestDecodeStructuredVideoProcessRejectsTranscodeField(t *testing.T) {
 	body := `{
-		"media_kind":"video",
+		"asset_type":"video",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/video.mp4"},
 		"pipeline":{"transcode":{"enabled":true,"encrypt":true}}
@@ -373,7 +373,7 @@ func TestDecodeStructuredVideoProcessRejectsTranscodeField(t *testing.T) {
 
 func TestDecodeStructuredImageProcessMapsToImageThumbnail(t *testing.T) {
 	body := `{
-		"media_kind":"image",
+		"asset_type":"image",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/image.png"},
 		"pipeline":{
@@ -408,7 +408,7 @@ func TestDecodeStructuredImageProcessMapsToImageThumbnail(t *testing.T) {
 
 func TestDecodeStructuredImageProcessRejectsDownloads(t *testing.T) {
 	body := `{
-		"media_kind":"image",
+		"asset_type":"image",
 		"operation":"process",
 		"source":{"hash":"hash123","key":"uploads/image.png"},
 		"pipeline":{

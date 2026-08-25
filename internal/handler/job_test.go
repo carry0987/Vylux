@@ -214,7 +214,7 @@ func TestDecodeVideoJobRequest(t *testing.T) {
 	}
 }
 
-func TestRequestFingerprint_StructuredMatchesLegacyAudio(t *testing.T) {
+func TestRequestFingerprint_StructuredMatchesCanonicalAudio(t *testing.T) {
 	structuredBody := `{
 		"source":{"hash":"hash123","key":"uploads/audio.flac"},
 		"pipeline":{
@@ -231,7 +231,7 @@ func TestRequestFingerprint_StructuredMatchesLegacyAudio(t *testing.T) {
 		t.Fatalf("canonicalize structured request: %v", err)
 	}
 
-	legacyReq := JobRequest{
+	canonicalReq := JobRequest{
 		Type:   queue.TypeAudioTranscode,
 		Hash:   "hash123",
 		Source: "uploads/audio.flac",
@@ -242,20 +242,20 @@ func TestRequestFingerprint_StructuredMatchesLegacyAudio(t *testing.T) {
 			"mp3_bitrate": "192k",
 		},
 	}
-	if err := canonicalizeJobRequest(&legacyReq); err != nil {
-		t.Fatalf("canonicalize legacy request: %v", err)
+	if err := canonicalizeJobRequest(&canonicalReq); err != nil {
+		t.Fatalf("canonicalize canonical request: %v", err)
 	}
 
 	structuredFingerprint, err := requestFingerprint(structuredReq)
 	if err != nil {
 		t.Fatalf("requestFingerprint(structured): %v", err)
 	}
-	legacyFingerprint, err := requestFingerprint(legacyReq)
+	canonicalFingerprint, err := requestFingerprint(canonicalReq)
 	if err != nil {
-		t.Fatalf("requestFingerprint(legacy): %v", err)
+		t.Fatalf("requestFingerprint(canonical): %v", err)
 	}
-	if structuredFingerprint != legacyFingerprint {
-		t.Fatalf("fingerprints differ: structured=%q legacy=%q", structuredFingerprint, legacyFingerprint)
+	if structuredFingerprint != canonicalFingerprint {
+		t.Fatalf("fingerprints differ: structured=%q canonical=%q", structuredFingerprint, canonicalFingerprint)
 	}
 }
 

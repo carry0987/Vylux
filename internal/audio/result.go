@@ -55,9 +55,16 @@ type WaveformArtifact struct {
 type HLSStreamingArtifact struct {
 	Protocol           string              `json:"protocol"`
 	Container          string              `json:"container"`
+	Encrypted          bool                `json:"encrypted"`
 	MasterPlaylist     string              `json:"master_playlist"`
 	DefaultRenditionID string              `json:"default_rendition_id,omitempty"`
 	Renditions         []RenditionArtifact `json:"renditions"`
+}
+
+type EncryptionArtifact struct {
+	Scheme      string `json:"scheme"`
+	KID         string `json:"kid"`
+	KeyEndpoint string `json:"key_endpoint"`
 }
 
 // RenditionArtifact describes one published HLS rendition.
@@ -75,12 +82,13 @@ type RenditionArtifact struct {
 
 // ProcessResult describes the current audio processing outputs.
 type ProcessResult struct {
-	Analysis  ProbeResult           `json:"analysis"`
-	Stages    ProcessStages         `json:"stages"`
-	Failure   *FailureContext       `json:"failure,omitempty"`
-	Streaming *HLSStreamingArtifact `json:"streaming,omitempty"`
-	Downloads []DownloadArtifact    `json:"downloads,omitempty"`
-	Waveform  *WaveformArtifact     `json:"waveform,omitempty"`
+	Analysis   ProbeResult           `json:"analysis"`
+	Stages     ProcessStages         `json:"stages"`
+	Failure    *FailureContext       `json:"failure,omitempty"`
+	Streaming  *HLSStreamingArtifact `json:"streaming,omitempty"`
+	Encryption *EncryptionArtifact   `json:"encryption,omitempty"`
+	Downloads  []DownloadArtifact    `json:"downloads,omitempty"`
+	Waveform   *WaveformArtifact     `json:"waveform,omitempty"`
 }
 
 // NewProcessResult creates the audio result envelope with stage defaults.

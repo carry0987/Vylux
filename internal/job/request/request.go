@@ -12,7 +12,7 @@ import (
 	"Vylux/internal/queue"
 )
 
-// Normalized is the legacy-compatible request model consumed by the current job handler.
+// Normalized is the internal request model consumed by the current job handler.
 type Normalized struct {
 	Type        string
 	Hash        string
@@ -36,7 +36,7 @@ type rawJobRequest struct {
 	Source      sourceField                `json:"source"`
 	Options     map[string]any             `json:"options,omitempty"`
 	CallbackURL string                     `json:"callback_url"`
-	MediaKind   string                     `json:"media_kind"`
+	AssetType   string                     `json:"asset_type"`
 	Operation   string                     `json:"operation"`
 	Pipeline    *structuredPipelineRequest `json:"pipeline,omitempty"`
 	Delivery    *structuredDeliveryRequest `json:"delivery,omitempty"`
@@ -116,7 +116,7 @@ type structuredDeliveryRequest struct {
 	CallbackURL string `json:"callback_url"`
 }
 
-// Decode reads either the legacy or structured job request schema and normalizes it.
+// Decode reads the structured job request schema and normalizes it.
 func Decode(r io.Reader) (Normalized, error) {
 	var req rawJobRequest
 	dec := json.NewDecoder(r)
@@ -124,14 +124,10 @@ func Decode(r io.Reader) (Normalized, error) {
 	if err := dec.Decode(&req); err != nil {
 		return Normalized{}, err
 	}
-	if req.isStructured() {
-		return req.normalizeStructured()
+	if !req.isStructured() {
+		return Normalized{}, fmt.Errorf("job requests must use the structured asset_type/operation contract")
 	}
-	if strings.EqualFold(strings.TrimSpace(req.Type), queue.TypeAudioTranscode) {
-		return Normalized{}, fmt.Errorf("legacy audio requests are not supported; use POST /api/audio/jobs")
-	}
-
-	return req.normalizeLegacy(), nil
+	return req.normalizeStructured()
 }
 
 // DecodeAudioCreate reads the public audio create contract used by POST /api/audio/jobs.
@@ -142,8 +138,8 @@ func DecodeAudioCreate(r io.Reader) (Normalized, error) {
 	if err := dec.Decode(&req); err != nil {
 		return Normalized{}, err
 	}
-	if req.Type != "" || req.Hash != "" || req.Options != nil || req.CallbackURL != "" || req.MediaKind != "" || req.Operation != "" {
-		return Normalized{}, fmt.Errorf("audio create requests must use the /api/audio/jobs contract without type/hash/options/callback_url/media_kind/operation fields")
+	if req.Type != "" || req.Hash != "" || req.Options != nil || req.CallbackURL != "" || req.AssetType != "" || req.Operation != "" {
+		return Normalized{}, fmt.Errorf("audio create requests must use the /api/audio/jobs contract without type/hash/options/callback_url/asset_type/operation fields")
 	}
 
 	return req.normalizeStructuredAudioProcess()
@@ -157,8 +153,8 @@ func DecodeVideoCreate(r io.Reader) (Normalized, error) {
 	if err := dec.Decode(&req); err != nil {
 		return Normalized{}, err
 	}
-	if req.Type != "" || req.Hash != "" || req.Options != nil || req.CallbackURL != "" || req.MediaKind != "" || req.Operation != "" {
-		return Normalized{}, fmt.Errorf("video create requests must use the /api/video/jobs contract without type/hash/options/callback_url/media_kind/operation fields")
+	if req.Type != "" || req.Hash != "" || req.Options != nil || req.CallbackURL != "" || req.AssetType != "" || req.Operation != "" {
+		return Normalized{}, fmt.Errorf("video create requests must use the /api/video/jobs contract without type/hash/options/callback_url/asset_type/operation fields")
 	}
 
 	return req.normalizeStructuredVideoProcess()
@@ -253,38 +249,28 @@ func Canonicalize(r *Normalized) error {
 }
 
 func (r *rawJobRequest) isStructured() bool {
-	return r.MediaKind != "" || r.Operation != "" || r.Pipeline != nil || r.Delivery != nil || r.Source.structured
-}
-
-func (r *rawJobRequest) normalizeLegacy() Normalized {
-	return Normalized{
-		Type:        r.Type,
-		Hash:        r.Hash,
-		Source:      r.Source.Key,
-		Options:     r.Options,
-		CallbackURL: r.CallbackURL,
-	}
+	return r.AssetType != "" || r.Operation != "" || r.Pipeline != nil || r.Delivery != nil || r.Source.structured
 }
 
 func (r *rawJobRequest) normalizeStructured() (Normalized, error) {
 	if r.Type != "" || r.Hash != "" || r.Options != nil || r.CallbackURL != "" {
-		return Normalized{}, fmt.Errorf("structured requests cannot include legacy type/hash/options/callback_url fields")
+		return Normalized{}, fmt.Errorf("structured requests cannot include type/hash/options/callback_url fields")
 	}
-	mediaKind := strings.ToLower(strings.TrimSpace(r.MediaKind))
+	assetType := strings.ToLower(strings.TrimSpace(r.AssetType))
 	operation := strings.ToLower(strings.TrimSpace(r.Operation))
 	switch {
-	case mediaKind == "audio" && operation == "process":
+	case assetType == "audio" && operation == "process":
 		return r.normalizeStructuredAudioProcess()
-	case mediaKind == "image" && operation == "process":
+	case assetType == "image" && operation == "process":
 		return r.normalizeStructuredImageProcess()
-	case mediaKind == "video" && operation == "process":
+	case assetType == "video" && operation == "process":
 		return r.normalizeStructuredVideoProcess()
-	case mediaKind == "":
-		return Normalized{}, fmt.Errorf("media_kind is required for structured requests")
+	case assetType == "":
+		return Normalized{}, fmt.Errorf("asset_type is required for structured requests")
 	case operation == "":
 		return Normalized{}, fmt.Errorf("operation is required for structured requests")
 	default:
-		return Normalized{}, fmt.Errorf("unsupported structured request: media_kind=%q operation=%q", mediaKind, operation)
+		return Normalized{}, fmt.Errorf("unsupported structured request: asset_type=%q operation=%q", assetType, operation)
 	}
 }
 
@@ -388,6 +374,12 @@ func buildStructuredAudioOptions(pipeline *structuredPipelineRequest) (map[strin
 		}
 		if pipeline.Package.HLS.Enabled {
 			options["hls"] = true
+		}
+		if pipeline.Package.HLS.Encryption != nil && pipeline.Package.HLS.Encryption.Enabled {
+			if !pipeline.Package.HLS.Enabled {
+				return nil, fmt.Errorf("pipeline.package.hls.encryption requires pipeline.package.hls.enabled=true")
+			}
+			options["encrypt"] = true
 		}
 	}
 	for _, download := range pipeline.Downloads {
@@ -662,9 +654,16 @@ func validateJobOptions(jobType string, opts map[string]any) error {
 			return fmt.Errorf("invalid options: %w", err)
 		}
 	case queue.TypeAudioTranscode:
-		_, err := parseAudioTranscodeOptions(opts)
+		parsed, err := parseAudioTranscodeOptions(opts)
 		if err != nil {
 			return fmt.Errorf("invalid options: %w", err)
+		}
+		canonicalizeAudioTranscodeOptions(&parsed)
+		if parsed.Encrypt && (parsed.MP3 || parsed.FLAC) {
+			return fmt.Errorf("invalid options: encrypted audio jobs cannot request mp3 or flac downloads")
+		}
+		if parsed.Encrypt && !parsed.HLS {
+			return fmt.Errorf("invalid options: encrypted audio jobs require hls output")
 		}
 	case queue.TypeVideoCover:
 		_, err := parseVideoCoverOptions(opts)

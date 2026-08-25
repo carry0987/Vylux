@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -8,6 +9,10 @@ import (
 	"net/http"
 	"testing"
 	"time"
+	"uuid"
+
+	"Vylux/internal/db/dbq"
+	"Vylux/internal/encryption"
 )
 
 // TestKeyHandler_NoToken verifies 401 without a token.
@@ -19,9 +24,9 @@ func TestKeyHandler_NoToken(t *testing.T) {
 	ts, _, cleanup := newTestServer(t)
 	defer cleanup()
 
-	resp, err := http.Get(ts.URL + "/api/key/some-hash")
+	resp, err := http.Get(ts.URL + "/api/key/some-key")
 	if err != nil {
-		t.Fatalf("GET /api/key/:hash: %v", err)
+		t.Fatalf("GET /api/key/:id: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -36,15 +41,17 @@ func TestKeyHandler_InvalidToken(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, _, cleanup := newTestServer(t)
+	ts, cfg, _, queries, _, cleanup := newS3BackedTestServerWithDeps(t)
 	defer cleanup()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/some-hash", nil)
+	keyID := seedEncryptionKey(t, cfg.EncryptionKey, queries, "some-hash", encryption.AssetTypeVideo)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/"+keyID, nil)
 	req.Header.Set("Authorization", "Bearer invalid.token")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET /api/key/:hash: %v", err)
+		t.Fatalf("GET /api/key/:id: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -59,18 +66,19 @@ func TestKeyHandler_ExpiredToken(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, cfg, cleanup := newTestServer(t)
+	ts, cfg, _, queries, _, cleanup := newS3BackedTestServerWithDeps(t)
 	defer cleanup()
 
 	hash := "expired-token-hash"
+	keyID := seedEncryptionKey(t, cfg.EncryptionKey, queries, hash, encryption.AssetTypeVideo)
 	token := generateKeyToken(hash, cfg.KeyTokenSecret, -1*time.Hour)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/"+hash, nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/"+keyID, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET /api/key/:hash: %v", err)
+		t.Fatalf("GET /api/key/:id: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -85,17 +93,18 @@ func TestKeyHandler_HashMismatch(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	ts, cfg, cleanup := newTestServer(t)
+	ts, cfg, _, queries, _, cleanup := newS3BackedTestServerWithDeps(t)
 	defer cleanup()
 
+	keyID := seedEncryptionKey(t, cfg.EncryptionKey, queries, "correct-hash", encryption.AssetTypeVideo)
 	token := generateKeyToken("wrong-hash", cfg.KeyTokenSecret, 1*time.Hour)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/correct-hash", nil)
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/key/"+keyID, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("GET /api/key/:hash: %v", err)
+		t.Fatalf("GET /api/key/:id: %v", err)
 	}
 	defer resp.Body.Close()
 
@@ -126,4 +135,35 @@ func generateKeyToken(hash, secret string, ttl time.Duration) string {
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	return payloadB64 + "." + sigB64
+}
+
+func seedEncryptionKey(t *testing.T, encryptionKey string, queries *dbq.Queries, hash, assetType string) string {
+	t.Helper()
+
+	wrapper, err := encryption.NewKeyWrapper(encryptionKey)
+	if err != nil {
+		t.Fatalf("new key wrapper: %v", err)
+	}
+
+	wrappedKey, wrapNonce, kekVersion, err := wrapper.Wrap([]byte("0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("wrap key: %v", err)
+	}
+
+	keyID := uuid.New()
+	if _, err := queries.UpsertStreamEncryptionKey(context.Background(), dbq.UpsertStreamEncryptionKeyParams{
+		ID:            keyID,
+		SourceHash:    hash,
+		AssetType:     assetType,
+		PackagingType: encryption.PackagingTypeHLS,
+		WrappedKey:    wrappedKey,
+		WrapNonce:     wrapNonce,
+		KekVersion:    kekVersion,
+		Kid:           "kid",
+		Scheme:        encryption.DefaultProtectionScheme,
+	}); err != nil {
+		t.Fatalf("seed encryption key: %v", err)
+	}
+
+	return keyID.String()
 }

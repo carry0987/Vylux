@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -141,8 +142,8 @@ func TestAudioJob_StructuredProcessCompletesAndPublishesStreamingAssets(t *testi
 	if !ok {
 		t.Fatalf("results type = %T, want map[string]any", status.Results)
 	}
-	if _, ok := results["media_kind"]; ok {
-		t.Fatalf("expected media_kind to be omitted, got %#v", results["media_kind"])
+	if _, ok := results["asset_type"]; ok {
+		t.Fatalf("expected asset_type to be omitted, got %#v", results["asset_type"])
 	}
 
 	stages, ok := results["stages"].(map[string]any)
@@ -221,7 +222,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForAudio(t *testing.T) {
 	defer cleanup()
 
 	body := map[string]any{
-		"media_kind": "audio",
+		"asset_type": "audio",
 		"operation":  "process",
 		"source": map[string]any{
 			"hash": "reject-audio-generic-route",
@@ -260,7 +261,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForVideo(t *testing.T) {
 	defer cleanup()
 
 	body := map[string]any{
-		"media_kind": "video",
+		"asset_type": "video",
 		"operation":  "process",
 		"source": map[string]any{
 			"hash": "reject-video-generic-route",
@@ -327,22 +328,27 @@ func writeAudioToolStubs(t *testing.T, dir string) (ffmpegPath, ffprobePath, pac
 	waveformDataPath = filepath.Join(dir, "waveform.f32")
 	writeFloat32Samples(t, waveformDataPath, []float32{0, 0.5, -0.2, 1.0})
 
-	ffmpegScript := "#!/bin/sh\nset -eu\nlast=''\nfor arg in \"$@\"; do last=\"$arg\"; done\nprev=''\nwaveform=0\nfor arg in \"$@\"; do\n  if [ \"$prev\" = '-f' ] && [ \"$arg\" = 'f32le' ]; then waveform=1; fi\n  prev=\"$arg\"\ndone\nif [ \"$waveform\" -eq 1 ] && [ \"$last\" = '-' ]; then\n  cat \"$VYLUX_WAVEFORM_DATA\"\n  exit 0\nfi\ncase \"$last\" in\n  *.mp3|*.flac|*.mp4)\n    mkdir -p \"$(dirname \"$last\")\"\n    printf 'stub-media' > \"$last\"\n    ;;\nesac\n"
-	if err := os.WriteFile(ffmpegPath, []byte(ffmpegScript), 0o755); err != nil {
-		t.Fatalf("write ffmpeg stub: %v", err)
-	}
-
-	ffprobeScript := "#!/bin/sh\nprintf '%s' '{\"streams\":[{\"index\":0,\"codec_name\":\"flac\",\"codec_type\":\"audio\",\"sample_rate\":\"48000\",\"channels\":2,\"channel_layout\":\"stereo\",\"bit_rate\":\"1536000\",\"bits_per_sample\":24}],\"format\":{\"format_name\":\"flac\",\"duration\":\"12.5\",\"bit_rate\":\"1536000\"}}'\n"
-	if err := os.WriteFile(ffprobePath, []byte(ffprobeScript), 0o755); err != nil {
-		t.Fatalf("write ffprobe stub: %v", err)
-	}
-
-	packagerScript := "#!/bin/sh\nset -eu\ndescriptor=\"$1\"\nmaster=''\nprev=''\nfor arg in \"$@\"; do\n  if [ \"$prev\" = '--hls_master_playlist_output' ]; then master=\"$arg\"; fi\n  prev=\"$arg\"\ndone\ninit=$(printf '%s' \"$descriptor\" | tr ',' '\\n' | sed -n 's/^init_segment=//p')\nplaylist=$(printf '%s' \"$descriptor\" | tr ',' '\\n' | sed -n 's/^playlist_name=//p')\nsegment_template=$(printf '%s' \"$descriptor\" | tr ',' '\\n' | sed -n 's/^segment_template=//p')\nmkdir -p \"$(dirname \"$master\")\" \"$(dirname \"$init\")\" \"$(dirname \"$playlist\")\" \"$(dirname \"$segment_template\")\"\nprintf '#EXTM3U\\n' > \"$master\"\n: > \"$init\"\nprintf '#EXTM3U\\n' > \"$playlist\"\nsegment=$(printf '%s' \"$segment_template\" | sed 's/\\$Number\\$/1/g')\n: > \"$segment\"\n"
-	if err := os.WriteFile(packagerPath, []byte(packagerScript), 0o755); err != nil {
-		t.Fatalf("write packager stub: %v", err)
-	}
+	writeExecutableFixture(t, ffmpegPath, "ffmpeg_stub.sh")
+	writeExecutableFixture(t, ffprobePath, "ffprobe_stub.sh")
+	writeExecutableFixture(t, packagerPath, "packager_stub.sh")
 
 	return ffmpegPath, ffprobePath, packagerPath, waveformDataPath
+}
+
+func writeExecutableFixture(t *testing.T, destinationPath, fixtureName string) {
+	t.Helper()
+	_, currentFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve audio integration test path")
+	}
+	fixturePath := filepath.Join(filepath.Dir(currentFile), "..", "testdata", "audio", fixtureName)
+	data, err := os.ReadFile(fixturePath)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", fixtureName, err)
+	}
+	if err := os.WriteFile(destinationPath, data, 0o755); err != nil {
+		t.Fatalf("write fixture %s: %v", fixtureName, err)
+	}
 }
 
 func writeFloat32Samples(t *testing.T, path string, samples []float32) {

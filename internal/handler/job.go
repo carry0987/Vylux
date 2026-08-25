@@ -392,6 +392,11 @@ func canonicalizeAudioTranscodeOptions(opts *queue.AudioTranscodeOptions) {
 	if opts == nil {
 		return
 	}
+	if opts.Encrypt {
+		opts.HLS = true
+		opts.MP3 = false
+		opts.FLAC = false
+	}
 	if !opts.HLS && !opts.MP3 && !opts.FLAC && !opts.Waveform {
 		opts.HLS = true
 		opts.MP3 = true
@@ -673,6 +678,7 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 			Hash:         req.Hash,
 			Source:       req.Source,
 			HLS:          options.HLS,
+			Encrypt:      options.Encrypt,
 			MP3:          options.MP3,
 			FLAC:         options.FLAC,
 			Waveform:     options.Waveform,

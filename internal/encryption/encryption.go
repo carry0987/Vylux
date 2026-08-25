@@ -5,18 +5,30 @@ import (
 	"crypto/rand"
 	"fmt"
 	"strings"
+	"uuid"
 
 	"Vylux/internal/db/dbq"
 )
 
 const DefaultProtectionScheme = "cbcs"
 
+const (
+	AssetTypeAudio   = "audio"
+	AssetTypeVideo   = "video"
+	PackagingTypeHLS = "hls"
+)
+
 // Material describes the encryption metadata required for raw-key CMAF packaging.
 type Material struct {
+	ID               uuid.UUID
 	Key              []byte
 	KeyID            []byte
 	ProtectionScheme string
 	KeyURI           string
+}
+
+func KeyURI(baseURL string, id uuid.UUID) string {
+	return strings.TrimRight(baseURL, "/") + "/api/key/" + id.String()
 }
 
 // GenerateKey returns a random 16-byte AES-128 key.
@@ -33,6 +45,7 @@ func GenerateKey() ([]byte, error) {
 func SetupHLSEncryption(
 	ctx context.Context,
 	hash string,
+	assetType string,
 	baseURL string,
 	queries *dbq.Queries,
 	wrapper *KeyWrapper,
@@ -47,27 +60,30 @@ func SetupHLSEncryption(
 		return nil, fmt.Errorf("generate KID: %w", err)
 	}
 
-	keyURI := strings.TrimRight(baseURL, "/") + "/api/key/" + hash
 	wrappedKey, wrapNonce, kekVersion, err := wrapper.Wrap(aesKey)
 	if err != nil {
 		return nil, fmt.Errorf("wrap content key: %w", err)
 	}
-	if err := queries.UpsertEncryptionKey(ctx, dbq.UpsertEncryptionKeyParams{
-		Hash:       hash,
-		WrappedKey: wrappedKey,
-		WrapNonce:  wrapNonce,
-		KekVersion: kekVersion,
-		Kid:        fmt.Sprintf("%x", kid),
-		Scheme:     DefaultProtectionScheme,
-		KeyUri:     keyURI,
-	}); err != nil {
+	row, err := queries.UpsertStreamEncryptionKey(ctx, dbq.UpsertStreamEncryptionKeyParams{
+		ID:            uuid.New(),
+		SourceHash:    hash,
+		AssetType:     assetType,
+		PackagingType: PackagingTypeHLS,
+		WrappedKey:    wrappedKey,
+		WrapNonce:     wrapNonce,
+		KekVersion:    kekVersion,
+		Kid:           fmt.Sprintf("%x", kid),
+		Scheme:        DefaultProtectionScheme,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("upsert encryption key: %w", err)
 	}
 
 	return &Material{
+		ID:               row.ID,
 		Key:              aesKey,
 		KeyID:            kid,
 		ProtectionScheme: DefaultProtectionScheme,
-		KeyURI:           keyURI,
+		KeyURI:           KeyURI(baseURL, row.ID),
 	}, nil
 }

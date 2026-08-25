@@ -17,6 +17,10 @@ sql:
               type: "RawMessage"
           - db_type: "timestamptz"
             go_type: "time.Time"
+          - db_type: "uuid"
+            go_type:
+              import: "uuid"
+              type: "UUID"
           - db_type: "jsonb"
             go_type:
               import: "encoding/json"

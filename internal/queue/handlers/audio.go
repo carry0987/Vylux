@@ -12,6 +12,7 @@ import (
 
 	"Vylux/internal/audio"
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/encryption"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
 	apptracing "Vylux/internal/tracing"
@@ -34,6 +35,7 @@ func HandleAudioTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 				"job_id", taskID,
 				"hash", p.Hash,
 				"hls", p.HLS,
+				"encrypt", p.Encrypt,
 				"mp3", p.MP3,
 				"flac", p.FLAC,
 				"waveform", p.Waveform,
@@ -131,6 +133,23 @@ func HandleAudioTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 		}
 
 		if p.HLS {
+			var encMaterial *encryption.Material
+			if p.Encrypt {
+				encryptCtx, encryptSpan := startWorkerSpan(ctx, "worker.audio.setup_encryption",
+					attribute.String("media.hash", p.Hash),
+				)
+				encMaterial, err = encryption.SetupHLSEncryption(encryptCtx, p.Hash, encryption.AssetTypeAudio, d.Config.BaseURL, d.Queries, d.KeyWrapper)
+				if err != nil {
+					recordSpanError(encryptSpan, err)
+					encryptSpan.End()
+					message := fmt.Sprintf("setup encryption: %v", err)
+					result.Stages.Package = audio.FailedStage("encryption_setup_failed", message)
+					skipPendingAudioStages(&result, "not_attempted_after_package_failure")
+					return failAudioProcess(ctx, d, taskID, meta, &result, audio.StagePackage, "encryption_setup_failed", message)
+				}
+				encryptSpan.End()
+			}
+
 			scratchDir, err := prepareTempRoot("")
 			if err != nil {
 				message := err.Error()
@@ -151,7 +170,16 @@ func HandleAudioTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 				attribute.String("file.path", tmpPath),
 				attribute.String("file.output_dir", hlsDir),
 			)
-			hlsResult, err := audio.PackageHLS(hlsCtx, tmpPath, hlsDir, nil)
+			hlsOptions := &audio.HLSOptions{}
+			if encMaterial != nil {
+				hlsOptions.Encryption = &audio.EncryptionConfig{
+					KeyID:            fmt.Sprintf("%x", encMaterial.KeyID),
+					Key:              encMaterial.Key,
+					ProtectionScheme: encMaterial.ProtectionScheme,
+					HLSKeyURI:        encMaterial.KeyURI,
+				}
+			}
+			hlsResult, err := audio.PackageHLS(hlsCtx, tmpPath, hlsDir, hlsOptions)
 			if err != nil {
 				recordSpanError(hlsSpan, err)
 				hlsSpan.End()
@@ -171,7 +199,14 @@ func HandleAudioTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 				return failAudioProcess(ctx, d, taskID, meta, &result, audio.StagePackage, "upload_failed", message)
 			}
 
-			result.Streaming = buildAudioStreamingResult(p.Hash, hlsResult)
+			result.Streaming = buildAudioStreamingResult(p.Hash, hlsResult, encMaterial != nil)
+			if encMaterial != nil {
+				result.Encryption = &audio.EncryptionArtifact{
+					Scheme:      encMaterial.ProtectionScheme,
+					KID:         fmt.Sprintf("%x", encMaterial.KeyID),
+					KeyEndpoint: encMaterial.KeyURI,
+				}
+			}
 			result.Stages.Package = audio.ReadyStage()
 			_ = uploadedKeys
 		}
@@ -282,10 +317,11 @@ func audioProcessFailureError(result *audio.ProcessResult) error {
 	return fmt.Errorf("audio process failed at %s: %s", result.Failure.Stage, result.Failure.Message)
 }
 
-func buildAudioStreamingResult(hash string, result *audio.HLSResult) *audio.HLSStreamingArtifact {
+func buildAudioStreamingResult(hash string, result *audio.HLSResult, encrypted bool) *audio.HLSStreamingArtifact {
 	out := &audio.HLSStreamingArtifact{
 		Protocol:       "hls",
 		Container:      "cmaf",
+		Encrypted:      encrypted,
 		MasterPlaylist: audioS3Key(hash, result.MasterPlaylistPath),
 		Renditions:     make([]audio.RenditionArtifact, 0, len(result.Renditions)),
 	}

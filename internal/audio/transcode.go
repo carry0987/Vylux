@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -45,6 +46,14 @@ type HLSTrack struct {
 type HLSOptions struct {
 	Track      HLSTrack
 	SegmentSec int
+	Encryption *EncryptionConfig
+}
+
+type EncryptionConfig struct {
+	KeyID            string
+	Key              []byte
+	ProtectionScheme string
+	HLSKeyURI        string
 }
 
 // DefaultHLSTrack returns the baseline audio rendition for playback.
@@ -195,6 +204,22 @@ func packageAudioHLS(ctx context.Context, outDir, encodedTrack string, opts *HLS
 	if hasPackagerLanguage(opts.Track.Language) {
 		args = append(args, "--default_language", opts.Track.Language)
 	}
+	if opts.Encryption != nil {
+		if len(opts.Encryption.Key) == 0 || opts.Encryption.KeyID == "" || opts.Encryption.HLSKeyURI == "" {
+			return errors.New("incomplete encryption config")
+		}
+		scheme := opts.Encryption.ProtectionScheme
+		if scheme == "" {
+			scheme = "cbcs"
+		}
+		args = append(args,
+			"--enable_raw_key_encryption",
+			"--protection_scheme", scheme,
+			"--clear_lead", "0",
+			"--keys", "label=:key_id="+opts.Encryption.KeyID+":key="+keyHex(opts.Encryption.Key),
+			"--hls_key_uri", opts.Encryption.HLSKeyURI,
+		)
+	}
 
 	slog.Debug("shaka package audio hls", "args", strings.Join(args, " "))
 	if err := packager(ctx, args...).Run(os.Stderr); err != nil {
@@ -272,6 +297,10 @@ func parseBitrate(value string) int {
 	}
 
 	return n * multiplier
+}
+
+func keyHex(data []byte) string {
+	return fmt.Sprintf("%x", data)
 }
 
 func ensureDir(path string) error {
