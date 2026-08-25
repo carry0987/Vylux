@@ -22,6 +22,12 @@
 .temp
 .tmp
 
+# Python artifacts for docs-side tooling
+*.pyc
+*.pyo
+__pycache__/
+tools/**/.venv/
+
 # Logs
 npm-debug.log*
 pnpm-debug.log*

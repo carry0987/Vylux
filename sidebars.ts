@@ -39,7 +39,7 @@ const sidebars: SidebarsConfig = {
         {
             type: 'category',
             label: 'Development',
-            items: ['development/testing', 'development/extending'],
+            items: ['development/testing', 'development/manual-local-testing', 'development/extending'],
         },
     ],
 };

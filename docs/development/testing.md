@@ -35,6 +35,8 @@ The release-focused manual checks should cover:
 
 For the full setup of `BASE_URL`, `API_KEY`, buckets, and secrets used by these smoke tests, see [Configuration](../operations/configuration).
 
+If you prefer to drive these checks through the docs-branch Python helpers instead of raw `curl`, see [Manual Local Testing Toolkit](./manual-local-testing).
+
 ## Suggested smoke-test flow
 
 ### `audio:transcode`

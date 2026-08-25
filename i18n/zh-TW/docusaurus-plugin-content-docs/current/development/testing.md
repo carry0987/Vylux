@@ -35,6 +35,8 @@ go test -v ./tests/integration
 
 這些 smoke test 會用到的 `BASE_URL`、`API_KEY`、buckets 與 secrets，完整說明請見 [設定](../operations/configuration)。
 
+如果你不想手動寫 `curl`，而想透過 docs branch 內附的 Python helper 來驅動這些檢查，可改看 [本機手動測試工具](./manual-local-testing)。
+
 ## 建議的 smoke test 順序
 
 ### `audio:transcode`
