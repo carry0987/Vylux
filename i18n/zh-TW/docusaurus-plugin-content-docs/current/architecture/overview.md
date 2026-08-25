@@ -39,7 +39,7 @@ flowchart LR
     HTTP -->|GET /thumb 與 GET /stream/*| Media[(Media Store)]
     HTTP -->|POST /api/audio/jobs 與 POST /api/video/jobs| Redis[(Redis / asynq)]
     HTTP -->|GET /api/jobs/:id| PG[(PostgreSQL)]
-    HTTP -->|GET /api/key/:hash| PG
+    HTTP -->|GET /api/key/:id| PG
     Redis --> Worker[Vylux Worker]
     Worker --> FFmpeg[FFmpeg / ffprobe]
     Worker --> Packager[Shaka Packager]
@@ -69,7 +69,7 @@ flowchart LR
 - `/api/audio/jobs` 與 `/api/video/jobs` 建立工作
 - `/api/jobs/:id` 查詢工作
 - `/stream/{hash}/*` 代理 HLS 資產
-- `/api/key/{hash}` 驗證 Bearer token 後回傳 16-byte AES key
+- `/api/key/{id}` 驗證 Bearer token 後回傳 16-byte AES key
 - `/healthz`、`/readyz`、`/metrics`
 
 除了路由之外，HTTP server 也負責：

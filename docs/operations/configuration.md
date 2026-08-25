@@ -77,7 +77,7 @@ Vylux requires both source and media storage settings explicitly. Even if both r
 | `HMAC_SECRET` | yes | none | signs image and media-delivery URLs |
 | `API_KEY` | yes | none | protects `/api/*` management endpoints |
 | `WEBHOOK_SECRET` | yes | none | signs webhook callback payloads |
-| `KEY_TOKEN_SECRET` | yes | none | verifies Bearer tokens for `/api/key/{hash}` |
+| `KEY_TOKEN_SECRET` | yes | none | verifies Bearer tokens for `/api/key/{id}` |
 | `ENCRYPTION_KEY` | yes | none | KEK used to wrap stored content keys |
 
 ### Quick secret generation

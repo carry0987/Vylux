@@ -215,7 +215,7 @@ At this point, do not stop at the storage key alone:
 
 - if the job returned an image-like media-bucket key such as a cover, preview, or thumbnail, convert it into a signed `/thumb/{sig}/{encoded_key}` URL before exposing it to a browser
 - if the job returned streaming results, use `/stream/{hash}/master.m3u8` as the public playback entrypoint rather than the raw `master_playlist` storage key
-- if encrypted playback is enabled, mint a Bearer token for `/api/key/{hash}` and attach it only on key requests
+- if encrypted playback is enabled, mint a Bearer token for the returned key endpoint, typically `/api/key/{id}`, and attach it only on key requests
 
 For the full mapping from job results to public URLs, see [Integration Guide](./integration-guide).
 

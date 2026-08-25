@@ -24,7 +24,7 @@ If the issue appears before any queue work exists, start with image delivery or 
 ### Playback and cleanup
 
 - `/stream/{hash}/*` playback reads from the media bucket
-- `/api/key/{hash}` key delivery for encrypted playback
+- `/api/key/{id}` key delivery for encrypted playback
 - cleanup removes derived assets, queue work, and related metadata
 
 ## 1. Real-time image flow
@@ -172,7 +172,7 @@ sequenceDiagram
 	participant Player
 	participant Server as Vylux Server
 	participant Media as Media Bucket
-	participant KeyAPI as /api/key/{hash}
+	participant KeyAPI as /api/key/{id}
 	participant PG as PostgreSQL
 
 	Player->>Server: GET /stream/{hash}/master.m3u8 or /stream/{hash}/hls/master.m3u8
@@ -183,7 +183,7 @@ sequenceDiagram
 	Server->>Media: fetch object
 	Server-->>Player: segment bytes
 	opt encrypted playback
-		Player->>KeyAPI: GET /api/key/{hash} + Bearer token
+		Player->>KeyAPI: GET /api/key/{id} + Bearer token
 		KeyAPI->>PG: fetch wrapped key row
 		PG-->>KeyAPI: wrapped key material
 		KeyAPI-->>Player: 16-byte content key
@@ -193,7 +193,7 @@ sequenceDiagram
 The server does not keep local copies of segments. It maps `/stream/{hash}/...` directly to media-bucket objects in the appropriate `videos/...` or `audio/...` namespace.
 
 :::note Playback uses stable public routes over storage keys
-Public players should use `/stream/{hash}` and `/api/key/{hash}`. Raw media-bucket keys remain an internal storage detail.
+Public players should use `/stream/{hash}` and `/api/key/{id}`. Raw media-bucket keys remain an internal storage detail.
 :::
 
 ## 5. Cleanup flow

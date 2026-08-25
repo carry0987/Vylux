@@ -1,6 +1,5 @@
----
 title: Encrypted Streaming
-description: "The practical raw-key CBCS / SAMPLE-AES lifecycle, including key generation, wrapped-key storage, `/api/key/{hash}` validation, and player integration."
+description: "The practical raw-key CBCS lifecycle for protected HLS, including stream-key storage, `/api/key/{id}` validation, and player integration."
 ---
 
 # Encrypted Streaming
@@ -16,10 +15,11 @@ Protected playback in Vylux currently uses:
 
 Encryption currently appears in:
 
+- `POST /api/audio/jobs` when `pipeline.package.hls.encryption.enabled=true`
 - `POST /api/video/jobs` when `pipeline.package.hls.encryption.enabled=true`
-- the internal `video:transcode` and `video:full` worker flows that implement that public contract
+- the internal `audio:transcode`, `video:transcode`, and `video:full` worker flows that implement those public contracts
 
-If `encrypt` is false, the HLS pipeline still runs normally but does not emit encryption metadata or require `/api/key/{hash}`.
+If `encrypt` is false, the HLS pipeline still runs normally but does not emit encryption metadata or require `/api/key/{id}`.
 
 ## Key-material lifecycle
 
@@ -30,15 +30,15 @@ sequenceDiagram
 		participant PG as PostgreSQL
 		participant Packager as Shaka Packager
 		participant Player
-		participant KeyAPI as /api/key/{hash}
+		participant KeyAPI as /api/key/{id}
 
 		Worker->>Worker: generate 16-byte AES key
 		Worker->>Worker: generate 16-byte KID
 		Worker->>Wrapper: Wrap(aesKey)
 		Wrapper-->>Worker: wrapped_key + wrap_nonce + kek_version
-		Worker->>PG: upsert encryption key row
+		Worker->>PG: upsert stream_encryption_keys row
 		Worker->>Packager: raw-key packaging with cbcs + key URI
-		Player->>KeyAPI: GET /api/key/{hash} + Bearer token
+		Player->>KeyAPI: GET /api/key/{id} + Bearer token
 		KeyAPI->>PG: fetch wrapped key row
 		KeyAPI->>Wrapper: Unwrap(...)
 		Wrapper-->>KeyAPI: plaintext 16-byte AES key
@@ -49,14 +49,17 @@ sequenceDiagram
 
 Vylux does not persist plaintext content keys. It stores:
 
+- `id`
+- `source_hash`
+- `asset_type`
+- `packaging_type`
 - `wrapped_key`
 - `wrap_nonce`
 - `kek_version`
 - `kid`
 - `scheme`
-- `key_uri`
 
-In other words, PostgreSQL holds unwrap metadata, not player-ready secret material.
+In other words, PostgreSQL holds unwrap metadata for a specific protected streaming asset, not player-ready secret material.
 
 The raw AES content key is also not written to a temporary key file. The worker passes key material directly to Shaka Packager through raw-key CLI arguments, so the deployment no longer needs a separate tmpfs mount just to protect encryption keys on disk.
 
@@ -65,10 +68,10 @@ The raw AES content key is also not written to a temporary key file. The worker 
 When the worker enables encryption, it constructs:
 
 ```text
-{BASE_URL}/api/key/{hash}
+{BASE_URL}/api/key/{id}
 ```
 
-as the `key_uri` written into the playlist.
+where `id` is the UUID of the stream-key record written for that protected asset.
 
 Therefore:
 
@@ -78,11 +81,11 @@ Therefore:
 
 ## Key endpoint semantics
 
-The player requests `/api/key/{hash}` when playback reaches encrypted content.
+The player requests `/api/key/{id}` when playback reaches encrypted content.
 
 - missing Bearer token: `401 Unauthorized`
 - invalid or expired token: `403 Forbidden`
-- missing key row for the hash: `404 Not Found`
+- missing key row for the key id: `404 Not Found`
 - valid token: `200 OK` with the 16-byte content key
 
 Additionally:
@@ -105,7 +108,7 @@ The key handler validates:
 1. token format
 2. the HMAC-SHA256 signature
 3. expiration
-4. hash equality between the token payload and the request path
+4. hash equality between the token payload and the stream-key record loaded by the request path
 
 ## Integration model
 
@@ -118,10 +121,11 @@ Before validating successful key delivery, obtain a valid Bearer token for the s
 At minimum, encrypted-streaming validation should confirm:
 
 - `results.streaming.encrypted == true`
+- `results.encryption.key_endpoint` exists
 - the playlist contains `#EXT-X-KEY`
-- `/api/key/{hash}` returns `401` without a token
-- `/api/key/{hash}` returns `403` for an invalid, expired, or mismatched token
-- `/api/key/{hash}` returns `404` if no key row exists for the hash
+- `/api/key/{id}` returns `401` without a token
+- `/api/key/{id}` returns `403` for an invalid, expired, or mismatched token
+- `/api/key/{id}` returns `404` if no stream-key row exists for the id
 - a valid token returns exactly 16 bytes
 
 ## Player integration

@@ -75,11 +75,12 @@ X-API-Key: {internal_api_key}
 | `source.hash` | 是 | 上游為這份媒體選定的穩定識別值 |
 | `source.key` | 是 | 已配置 source bucket 中的 object key |
 | `pipeline.package.hls.profile` | 否 | 啟用 HLS 時，目前支援 `stream_aac_standard` |
+| `pipeline.package.hls.encryption.enabled` | 否 | 設為 `true` 時產出受保護 audio HLS，並抑制 MP3/FLAC download output |
 | `pipeline.downloads[].profile` | 否 | 目前支援 `download_mp3_high` 與 `download_flac_standard` |
 | `pipeline.waveform.profile` | 否 | 目前支援 `waveform_standard` |
 | `delivery.callback_url` | 否 | 任務完成或失敗後，Vylux 會以 webhook POST 回呼 |
 
-音訊建立請求不再使用舊的 `type + options` 契約，也不需要 `media_kind`。
+音訊建立請求不再使用舊的 `type + options` 契約，也不需要 `asset_type` discriminator。
 
 ### Source 前置檢查
 
@@ -278,7 +279,13 @@ curl -s \
     "streaming": {
       "protocol": "hls",
       "container": "cmaf",
+      "encrypted": true,
       "master_playlist": "audio/al/album-track-001/hls/master.m3u8"
+    },
+    "encryption": {
+      "scheme": "cbcs",
+      "kid": "00112233445566778899aabbccddeeff",
+      "key_endpoint": "https://media.example.com/api/key/3d4fda2e-5cf2-4a4a-8ebd-c9eb1d4e8f1f"
     },
     "downloads": [
       {"format": "mp3", "key": "audio/al/album-track-001/downloads/audio.mp3"},

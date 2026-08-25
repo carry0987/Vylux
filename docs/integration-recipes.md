@@ -53,7 +53,7 @@ Use `/img` only when you need on-demand transformation from a source-bucket obje
 
 ## Recipe 2: play encrypted HLS output
 
-Use this flow when a video HLS job finished with encryption enabled.
+Use this flow when an audio or video HLS job finished with encryption enabled.
 
 Goal:
 
@@ -67,12 +67,12 @@ Flow:
 4. your backend mints a short-lived Bearer token whose payload contains the same media `hash`
 5. your frontend initializes the player with the playlist URL and the token
 6. the player fetches playlists and segments from `/stream/{hash}/*`
-7. the player adds `Authorization: Bearer {token}` only when requesting `/api/key/{hash}`
+7. the player adds `Authorization: Bearer {token}` only when requesting the `results.encryption.key_endpoint` URL, which is typically `/api/key/{id}`
 
 Your frontend usually needs two values:
 
 - a playlist URL such as `https://media.example.com/stream/movie-2026-04-01/master.m3u8`
-- a short-lived key token for `/api/key/movie-2026-04-01`
+- a short-lived key token for the key endpoint returned in `results.encryption.key_endpoint`
 
 What not to do:
 
@@ -107,7 +107,7 @@ Before calling these integrations done, verify:
 
 - cover and thumbnail URLs returned by your app use `/thumb`, not raw bucket keys
 - encrypted HLS playback works with `/stream/{hash}/master.m3u8`
-- `/api/key/{hash}` returns `401` without a token and `200` with a valid token
+- `/api/key/{id}` returns `401` without a token and `200` with a valid token
 - no public client ever sees `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET`
 
 ## Related docs

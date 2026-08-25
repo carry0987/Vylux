@@ -136,7 +136,7 @@ curl -s \
 - `results.streaming.master_playlist` 存在
 - `results.encryption.scheme == "cbcs"`
 - 變體 playlist 內可看到 `#EXT-X-KEY`
-- `/api/key/{hash}` 在未帶 token 時回 `401`，有效 token 時回 16 bytes
+- `/api/key/{id}` 在未帶 token 時回 `401`，有效 token 時回 16 bytes
 
 ## 最近驗證過的情境
 

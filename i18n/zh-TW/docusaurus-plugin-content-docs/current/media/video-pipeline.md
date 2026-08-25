@@ -203,4 +203,4 @@ worker 會先用 `ffprobe` 取得來源影片的顯示幾何資訊，再套用�
 
 ## 何時看下一頁
 
-如果你關心加密轉碼與 `/api/key/{hash}` 的整條生命週期，下一頁讀 [加密串流](./encrypted-streaming)。
+如果你關心加密轉碼與 `/api/key/{id}` 的整條生命週期，下一頁讀 [加密串流](./encrypted-streaming)。

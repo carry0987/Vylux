@@ -15,7 +15,7 @@ Vylux 透過 `POST /api/audio/jobs` 提供音訊處理能力。
 
 - `POST /api/audio/jobs`
 
-request body 以輸出導向為主，不再使用舊的 generic `type + options` schema，也不需要 `media_kind` 這種 discriminator。
+request body 以輸出導向為主，不再使用舊的 generic `type + options` schema，也不需要 `asset_type` 這種 discriminator 欄位。
 
 典型請求：
 

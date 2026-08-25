@@ -75,11 +75,12 @@ Create a new asynchronous audio job. If an equivalent request already exists and
 | `source.hash` | yes | stable media identifier chosen by the caller |
 | `source.key` | yes | source object key in the configured source bucket |
 | `pipeline.package.hls.profile` | no | currently `stream_aac_standard` when HLS packaging is enabled |
+| `pipeline.package.hls.encryption.enabled` | no | when `true`, generate protected audio HLS and suppress MP3/FLAC download outputs |
 | `pipeline.downloads[].profile` | no | currently `download_mp3_high` and `download_flac_standard` |
 | `pipeline.waveform.profile` | no | currently `waveform_standard` |
 | `delivery.callback_url` | no | optional webhook destination for final job state |
 
-Audio create requests do not use the old `type + options` contract and do not require `media_kind`.
+Audio create requests do not use the old `type + options` contract and do not require an `asset_type` discriminator.
 
 ### Source preflight checks
 
@@ -278,7 +279,13 @@ Query job state, progress, errors, and final results.
     "streaming": {
       "protocol": "hls",
       "container": "cmaf",
+      "encrypted": true,
       "master_playlist": "audio/al/album-track-001/hls/master.m3u8"
+    },
+    "encryption": {
+      "scheme": "cbcs",
+      "kid": "00112233445566778899aabbccddeeff",
+      "key_endpoint": "https://media.example.com/api/key/3d4fda2e-5cf2-4a4a-8ebd-c9eb1d4e8f1f"
     },
     "downloads": [
       {"format": "mp3", "key": "audio/al/album-track-001/downloads/audio.mp3"},

@@ -1,6 +1,6 @@
 ---
 title: 播放 API
-description: "`/stream/{hash}/*` 與 `/api/key/{hash}` 的路徑模型、授權方式與 curl 範例。"
+description: "`/stream/{hash}/*` 與 `/api/key/{id}` 的路徑模型、授權方式與 curl 範例。"
 ---
 
 # 播放 API
@@ -15,7 +15,7 @@ description: "`/stream/{hash}/*` 與 `/api/key/{hash}` 的路徑模型、授權�
 
 ### Key delivery
 
-- endpoint: `GET /api/key/{hash}`
+- endpoint: `GET /api/key/{id}`
 - auth: `Authorization: Bearer {token}`
 - 用途: 發放加密 HLS 播放所需的 16-byte content key
 
@@ -63,9 +63,9 @@ curl -I \
 對外播放時，入口會依媒體種類不同而不同：影片通常是 `/stream/{hash}/master.m3u8`，音訊 HLS 目前通常是 `/stream/{hash}/hls/master.m3u8`。job 結果裡的 object key 應視為後端 storage 路徑，而不是直接給瀏覽器的 public URL。
 :::
 
-## `GET /api/key/{hash}`
+## `GET /api/key/{id}`
 
-`GET /api/key/{hash}`
+`GET /api/key/{id}`
 
 這個端點不使用 `X-API-Key`，而是只接受：
 
@@ -74,7 +74,7 @@ Authorization: Bearer {token}
 ```
 
 :::warning 不要把播放 secrets 搬進瀏覽器
-`/api/key/{hash}` 刻意與 `X-API-Key` 分離。`KEY_TOKEN_SECRET` 應只存在於可信任的 backend 或授權服務，而且 Bearer token 不應放進 playlist URL 或 segment URL。
+`/api/key/{id}` 刻意與 `X-API-Key` 分離。`KEY_TOKEN_SECRET` 應只存在於可信任的 backend 或授權服務，而且 Bearer token 不應放進 playlist URL 或 segment URL。
 :::
 
 `KEY_TOKEN_SECRET` 與 `BASE_URL` 等播放相關設定的完整說明，請見 [設定](../operations/configuration)。
@@ -93,6 +93,7 @@ base64url({"hash":"...","exp":<unix_timestamp>}).base64url(HMAC-SHA256(payload_b
 
 ```bash showLineNumbers
 MEDIA_HASH='movie-2026-04-01'
+KEY_ID='replace-with-key-id'
 KEY_TOKEN_SECRET='replace-with-key-token-secret'
 
 PAYLOAD="$(jq -cn \
@@ -117,11 +118,11 @@ TOKEN="$PAYLOAD_B64.$SIG_B64"
 ### curl 範例
 
 ```bash showLineNumbers
-curl -i "http://localhost:3000/api/key/$MEDIA_HASH"
+curl -i "http://localhost:3000/api/key/$KEY_ID"
 
 curl -s \
     -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:3000/api/key/$MEDIA_HASH" \
+    "http://localhost:3000/api/key/$KEY_ID" \
     | wc -c
 ```
 
@@ -134,7 +135,7 @@ curl -s \
 | `200` | token 驗證成功，回傳 `application/octet-stream` 金鑰內容 |
 | `401` | 缺少 `Authorization: Bearer ...` |
 | `403` | token 簽名錯誤、已過期或 `hash` 不匹配 |
-| `404` | 該媒體沒有對應的 encryption key |
+| `404` | 該 key id 沒有對應的 stream key record |
 | `500` | unwrap 失敗或其他內部錯誤 |
 
 這個端點也有 Redis-based rate limit，預設每分鐘 120 次，依 Bearer token 或來源 IP 計算。
@@ -149,7 +150,8 @@ curl -s \
 2. 你的應用先驗證身份並檢查授權
 3. 你的應用回傳 public playlist URL，也就是 `/stream/X/master.m3u8`
 4. 你的應用同時回傳一個短效 Bearer token，且 payload 內含 `hash=X`
-5. 播放器只在請求 `/api/key/X` 時附上這個 token
+5. 你的應用也回傳完成 job 裡的 key endpoint 或 key id
+6. 播放器只在請求 `/api/key/{id}` 時附上這個 token
 
 不要把 `KEY_TOKEN_SECRET` 放進瀏覽器程式碼，也不要把 token 塞進 playlist 或 segment URL。
 

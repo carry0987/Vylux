@@ -76,7 +76,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 
 ## 本機 Jaeger 驗證
 
-若你想在本機檢查 request -> worker -> callback 的完整 trace，可使用最小 collector + Jaeger 組合。下面這段已吸收目前本地輔助配置的關鍵內容，所以正式 docs 不依賴 repo 內的臨時 local 目錄。
+若你想在本機檢查 request -> worker -> callback 的完整 trace，可使用最小 collector + Jaeger 組合。重點不只是 expose `4317` / `4318`，而是 collector 必須真的載入一份 config file，並把收到的 OTLP trace 轉送到 Jaeger。
 
 ### docker-compose 範例
 
@@ -84,6 +84,8 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 services:
   jaeger:
     image: jaegertracing/all-in-one:1.76.0
+    tmpfs:
+      - /tmp
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: true
@@ -92,7 +94,9 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.148.0
-    command: [--config=/etc/otelcol/otelcol.yaml]
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     restart: unless-stopped
     depends_on:
       - jaeger
@@ -102,7 +106,9 @@ services:
       - 13133:13133
 ```
 
-collector config 的最小 traces pipeline：
+collector 需要掛載實際的 config file。對本機開發來說，最直觀的檔名就是 repo root 下的 `otel-collector.yml`。
+
+### `otel-collector.yml`
 
 ```yml showLineNumbers
 receivers:
@@ -124,6 +130,10 @@ exporters:
     tls:
       insecure: true
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 service:
   extensions: [health_check]
   pipelines:
@@ -133,13 +143,56 @@ service:
       exporters: [debug, otlp/jaeger]
 ```
 
+### 每一段在做什麼
+
+- `receivers.otlp`：開 OTLP gRPC `4317` 與 OTLP HTTP `4318`
+- `processors.batch`：把 spans 做 batch 後再往下送，避免每個 span 都單獨 export
+- `exporters.debug`：把收到的 spans 印到 collector log，這是本機排查最快的觀察點
+- `exporters.otlp/jaeger`：把 traces 透過 OTLP gRPC 轉送到 Docker network 內的 Jaeger
+- `extensions.health_check`：提供 collector 的健康檢查端點 `13133`
+- `service.pipelines.traces`：把 receiver、processor、exporter 串起來；如果沒有這段 pipeline，collector container 會活著，但 Jaeger 仍然會是空的
+
+### OTLP endpoint 要怎麼選
+
+要依 Vylux process 本身跑在哪裡來決定：
+
+- 若 Vylux 跑在 Docker Compose 裡，請用 `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`
+- 若 Vylux 跑在 host、collector 跑在 Docker 裡，請用 `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+
+這也是為什麼常見做法是：
+
+- `.env` 放 container-to-container 位址，例如 `http://otel-collector:4318`
+- `.env.local` 放 host-to-container 位址，例如 `http://localhost:4318`
+
 ### 驗證流程
 
-1. 啟動 Jaeger 與 collector
-2. 對 server 與 worker 都設定 `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
-3. 建立一個 `POST /api/audio/jobs` 或 `POST /api/video/jobs`
+1. 啟動 Jaeger 與 collector，並確認 collector 有掛載 `otel-collector.yml`
+2. 對 server 與 worker 都設定正確的 `OTEL_EXPORTER_OTLP_ENDPOINT`
+3. 建立一個 `POST /api/audio/jobs` 或 `POST /api/video/jobs`，或呼叫其他會產生 trace 的 HTTP route
 4. 從 HTTP 回應 header 或日誌拿到 `X-Trace-ID`
-5. 到 Jaeger UI `http://localhost:16686` 搜尋 service `vylux` 或直接貼上 trace ID
+5. 先看 collector log，確認 `debug` exporter 有印出 spans
+6. 再到 Jaeger UI `http://localhost:16686` 搜尋 service `vylux` 或直接貼上 trace ID
+
+:::tip collector 必須真的載入 config 檔
+如果你透過 Docker Compose 跑 collector，請把 config file mount 進容器，並用 `--config=...` 啟動。只有開 port 並不足以把 trace 轉送到 Jaeger。
+:::
+
+### 本機驗證命令範例
+
+```bash showLineNumbers
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml logs -f otel-collector
+curl -i http://localhost:3100/healthz
+```
+
+如果 Jaeger 還是看不到 traces，請按這個順序檢查：
+
+1. 確認 Vylux 真的有載入非空的 `OTEL_EXPORTER_OTLP_ENDPOINT`
+2. 確認 collector log 裡的 `debug` exporter 看得到 spans
+3. 確認 `otel-collector.yml` 真的被 mount 到 `/etc/otelcol-contrib/config.yaml`
+4. 確認 collector 的啟動命令真的有 `--config=/etc/otelcol-contrib/config.yaml`
+5. 確認 Vylux 用的是對應執行環境的 host 名稱：Compose 內用 `otel-collector`，host 上跑則用 `localhost`
+6. 確認你打開的是 Jaeger UI `16686`，而不是把 trace 送去 UI port
 
 ## 建議監看的訊號
 

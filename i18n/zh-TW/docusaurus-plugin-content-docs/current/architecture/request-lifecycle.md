@@ -24,7 +24,7 @@ description: "Vylux 內最重要的幾條資料流：即時圖片、job 提交�
 ### Playback and cleanup
 
 - `/stream/{hash}/*` 從 media bucket 做播放讀取
-- `/api/key/{hash}` 為加密播放提供 key delivery
+- `/api/key/{id}` 為加密播放提供 key delivery
 - cleanup 會移除衍生資產、queue work 與相關 metadata
 
 ## 1. 即時圖片請求
@@ -179,7 +179,7 @@ sequenceDiagram
 	participant Player
 	participant Server as Vylux Server
 	participant Media as Media Bucket
-	participant KeyAPI as /api/key
+	participant KeyAPI as /api/key/{id}
 	participant PG as PostgreSQL
 
 	Player->>Server: GET /stream/{hash}/master.m3u8 或 /stream/{hash}/hls/master.m3u8
@@ -190,7 +190,7 @@ sequenceDiagram
 	Server->>Media: 讀對應 object
 	Server-->>Player: segment
 	opt encrypted playback
-		Player->>KeyAPI: GET /api/key/{hash} + Bearer token
+		Player->>KeyAPI: GET /api/key/{id} + Bearer token
 		KeyAPI->>PG: 讀 wrapped key
 		PG-->>KeyAPI: wrapped key material
 		KeyAPI-->>Player: 16-byte content key
@@ -205,10 +205,10 @@ sequenceDiagram
 
 對於未加密內容，播放器只需走 `/stream/...`。
 
-對於加密內容，播放器還會額外呼叫 `/api/key/{hash}`，並帶 `Authorization: Bearer {token}`。
+對於加密內容，播放器還會額外呼叫 `/api/key/{id}`，並帶 `Authorization: Bearer {token}`。
 
 :::note 播放對外應走穩定 public routes，而不是 storage key
-對外播放器應使用 `/stream/{hash}` 與 `/api/key/{hash}`。raw media-bucket key 仍應視為內部儲存細節。
+對外播放器應使用 `/stream/{hash}` 與 `/api/key/{id}`。raw media-bucket key 仍應視為內部儲存細節。
 :::
 
 ## 5. 清理

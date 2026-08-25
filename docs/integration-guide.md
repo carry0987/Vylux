@@ -17,7 +17,7 @@ The short version is:
 If you already know the signing rules, use this page as the map of which endpoint belongs to which use case.
 
 :::tip The core integration rule
-Job results often give you storage keys. Your application is usually responsible for turning those keys into signed `/thumb` URLs, public `/stream/{hash}` entrypoints, or tokenized `/api/key/{hash}` access.
+Job results often give you storage keys. Your application is usually responsible for turning those keys into signed `/thumb` URLs, public `/stream/{hash}` entrypoints, or tokenized `/api/key/{id}` access.
 :::
 
 ## What Vylux does and does not do
@@ -27,7 +27,7 @@ Vylux is responsible for:
 - processing source media into derived outputs
 - serving signed image and media-delivery endpoints
 - serving HLS playlists and segments under `/stream/{hash}/*`
-- validating Bearer tokens for `/api/key/{hash}`
+- validating Bearer tokens for `/api/key/{id}`
 
 Vylux is not responsible for:
 
@@ -44,7 +44,7 @@ That separation is intentional. Vylux owns media processing and media delivery s
 | --- | --- | --- |
 | `API_KEY` | internal `/api/*` management endpoints such as `/api/audio/jobs`, `/api/video/jobs`, and `/api/jobs/{id}` | your backend or internal tooling only |
 | `HMAC_SECRET` | signing `/img`, `/original`, and `/thumb` URLs | your backend or auth/signing service only |
-| `KEY_TOKEN_SECRET` | signing Bearer tokens for `/api/key/{hash}` | your backend or auth/signing service only |
+| `KEY_TOKEN_SECRET` | signing Bearer tokens for `/api/key/{id}` | your backend or auth/signing service only |
 
 Do not expose any of these values to browsers, mobile apps, or other public clients.
 
@@ -56,7 +56,7 @@ Do not expose any of these values to browsers, mobile apps, or other public clie
 | allow controlled download or display of the original source file | `/original/{sig}/{encoded_key}` | signed with `HMAC_SECRET` |
 | expose an already-generated thumbnail, cover, preview, or other media-bucket image asset | `/thumb/{sig}/{encoded_key}` | signed with `HMAC_SECRET` using the `thumb/` signing domain |
 | play HLS output | `/stream/{hash}/master.m3u8` | no auth header on playlist and segment requests |
-| fetch an encrypted content key during playback | `/api/key/{hash}` with `Authorization: Bearer {token}` | token signed with `KEY_TOKEN_SECRET` |
+| fetch an encrypted content key during playback | `/api/key/{id}` with `Authorization: Bearer {token}` | token signed with `KEY_TOKEN_SECRET` |
 
 ## How job results become user-facing URLs
 
@@ -119,12 +119,13 @@ You do not need a Bearer token for this case.
 
 ### Pattern 4: encrypted HLS playback
 
-For `video:transcode` or `video:full` with encryption enabled:
+For encrypted audio HLS, or for `video:transcode` / `video:full` with encryption enabled:
 
 1. your app submits the job and waits for completion
 2. your app exposes `/stream/{hash}/master.m3u8` to the player
 3. your app mints a Bearer token whose payload contains the same media `hash`
-4. the player attaches `Authorization: Bearer {token}` only on `/api/key/{hash}` requests
+4. your app also returns `results.encryption.key_endpoint` from the finished job result
+5. the player attaches `Authorization: Bearer {token}` only on `/api/key/{id}` requests
 
 Do not put that token into the playlist URL or the segment URL.
 
@@ -141,7 +142,7 @@ Before calling your integration complete, verify all of the following:
 - your backend can sign `/img`, `/original`, and `/thumb` URLs with `HMAC_SECRET`
 - your frontend never sees `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET`
 - your player uses `/stream/{hash}/master.m3u8` as the public HLS entrypoint
-- encrypted playback only sends `Authorization` headers to `/api/key/{hash}`
+- encrypted playback only sends `Authorization` headers to `/api/key/{id}`
 
 ## Where to go deeper
 

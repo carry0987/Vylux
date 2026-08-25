@@ -136,7 +136,7 @@ After completion, confirm at least:
 - `results.streaming.master_playlist` exists
 - `results.encryption.scheme == "cbcs"`
 - a variant playlist contains `#EXT-X-KEY`
-- `/api/key/{hash}` returns `401` without a token and 16 bytes with a valid token
+- `/api/key/{id}` returns `401` without a token and 16 bytes with a valid token
 
 ## Recently validated scenarios
 

@@ -64,7 +64,7 @@ or another OTLP HTTP endpoint. If the variable is empty, spans are still created
 
 ## Local Jaeger validation
 
-If you want to inspect end-to-end traces from the HTTP request into worker execution, use a minimal collector plus Jaeger stack. The following inline example captures the important details that were previously kept in local helper files, so the published docs remain self-contained.
+If you want to inspect end-to-end traces from the HTTP request into worker execution, use a minimal collector plus Jaeger stack. The key point is that the collector must load a real config file and forward OTLP traces to Jaeger; simply exposing `4317` and `4318` is not enough.
 
 ### docker-compose example
 
@@ -72,6 +72,8 @@ If you want to inspect end-to-end traces from the HTTP request into worker execu
 services:
   jaeger:
     image: jaegertracing/all-in-one:1.76.0
+    tmpfs:
+      - /tmp
     restart: unless-stopped
     environment:
       COLLECTOR_OTLP_ENABLED: true
@@ -80,7 +82,9 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.148.0
-    command: [--config=/etc/otelcol/otelcol.yaml]
+    volumes:
+      - ./otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
     restart: unless-stopped
     depends_on:
       - jaeger
@@ -90,7 +94,9 @@ services:
       - 13133:13133
 ```
 
-Minimal collector trace pipeline:
+The collector must mount a config file into the container. A practical local filename is `otel-collector.yml` at the repo root.
+
+### `otel-collector.yml`
 
 ```yml showLineNumbers
 receivers:
@@ -112,6 +118,10 @@ exporters:
     tls:
       insecure: true
 
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
 service:
   extensions: [health_check]
   pipelines:
@@ -121,13 +131,56 @@ service:
       exporters: [debug, otlp/jaeger]
 ```
 
+### What each block does
+
+- `receivers.otlp` opens OTLP gRPC on `4317` and OTLP HTTP on `4318`
+- `processors.batch` groups spans before export so the collector does not forward them one-by-one
+- `exporters.debug` prints received spans to the collector logs, which is the fastest way to verify that Vylux is actually exporting
+- `exporters.otlp/jaeger` forwards traces to Jaeger over OTLP gRPC on the internal Docker network
+- `extensions.health_check` exposes the collector health endpoint on `13133`
+- `service.pipelines.traces` wires the trace receiver, processor, and exporters together; without this pipeline, Jaeger will stay empty even though the collector container is up
+
+### Choosing the right OTLP endpoint
+
+Use the OTLP endpoint that matches where the Vylux process itself runs:
+
+- if Vylux runs inside Docker Compose, use `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`
+- if Vylux runs on the host while collector runs in Docker, use `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`
+
+That is why a typical setup uses:
+
+- `.env` for container-to-container addresses such as `http://otel-collector:4318`
+- `.env.local` for host-to-container addresses such as `http://localhost:4318`
+
 ### Validation flow
 
-1. Start Jaeger and the collector.
-2. Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` for both server and worker.
-3. Submit a `POST /api/audio/jobs` or `POST /api/video/jobs` request.
+1. Start Jaeger and the collector with `otel-collector.yml` mounted into the collector container.
+2. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to the correct OTLP HTTP address for both server and worker.
+3. Submit a `POST /api/audio/jobs` or `POST /api/video/jobs` request, or hit another traced HTTP route.
 4. Capture the `X-Trace-ID` from the HTTP response headers or logs.
-5. Open `http://localhost:16686` and search for service `vylux` or paste the trace ID directly.
+5. Check the collector logs first. The `debug` exporter should print spans.
+6. Open `http://localhost:16686` and search for service `vylux` or paste the trace ID directly.
+
+:::tip The collector must load a real config file
+If you run the collector through Docker Compose, mount the config file into the container and start it with `--config=...`. Exposing ports alone is not enough to forward traces to Jaeger.
+:::
+
+### Example local verification commands
+
+```bash showLineNumbers
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml logs -f otel-collector
+curl -i http://localhost:3100/healthz
+```
+
+If traces still do not appear in Jaeger after a media request:
+
+1. confirm Vylux actually loaded a non-empty `OTEL_EXPORTER_OTLP_ENDPOINT`
+2. confirm the collector logs show spans through the `debug` exporter
+3. confirm the collector config file was mounted to `/etc/otelcol-contrib/config.yaml`
+4. confirm the collector is started with `--config=/etc/otelcol-contrib/config.yaml`
+5. confirm Vylux is using the correct host name for where it runs: `otel-collector` inside Compose, `localhost` on the host
+6. confirm you are opening the Jaeger UI on `16686`, not trying to send traces there
 
 ## What to watch
 

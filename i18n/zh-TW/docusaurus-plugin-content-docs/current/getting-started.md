@@ -218,7 +218,7 @@ curl -s \
 
 - 若 job 回傳的是 cover、preview、thumbnail 這類 media-bucket key，應先轉成已簽名的 `/thumb/{sig}/{encoded_key}` URL 再提供給瀏覽器
 - 若 job 回傳的是影片串流結果，對外播放入口通常使用 `/stream/{hash}/master.m3u8`；若是音訊 HLS，則使用 `/stream/{hash}/hls/master.m3u8`
-- 若開啟加密播放，還需要額外產生 `/api/key/{hash}` 用的 Bearer token，且只在 key 請求上附加
+- 若開啟加密播放，還需要額外產生完成 job 結果中 key endpoint（通常是 `/api/key/{id}`）用的 Bearer token，且只在 key 請求上附加
 
 完整的 job 結果到對外 URL 映射，請看 [整合導覽](./integration-guide)。
 

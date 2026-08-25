@@ -15,7 +15,7 @@ Vylux 是一個獨立運行的媒體處理服務，將圖片即時轉換與非�
 - 以 domain-specific route 建立非同步工作：`/api/audio/jobs` 與 `/api/video/jobs`
 - 第一級音訊輸出：audio-only HLS、MP3、FLAC 與 waveform
 - HLS CMAF：AV1 + H.264 ladder、fMP4 segment、Shaka Packager 打包
-- 加密播放：CBCS / SAMPLE-AES、`/api/key/{hash}` Bearer token 金鑰發放
+- 加密播放：CBCS / SAMPLE-AES、`/api/key/{id}` Bearer token 金鑰發放
 - 維運能力：PostgreSQL job state、Redis queue、Prometheus metrics、OpenTelemetry tracing
 
 :::tip 先選符合你當前工作的閱讀路徑
@@ -50,7 +50,7 @@ Vylux 是一個獨立運行的媒體處理服務，將圖片即時轉換與非�
 - AV1 + H.264 雙 codec ladder
 - portrait / non-16:9 影片的實際解析度輸出
 - raw-key CBCS / SAMPLE-AES 加密串流
-- `/api/key/{hash}` Bearer token 金鑰發放
+- `/api/key/{id}` Bearer token 金鑰發放
 - PostgreSQL job state、Redis queue、Prometheus metrics、OpenTelemetry tracing
 
 ## 建議閱讀路徑

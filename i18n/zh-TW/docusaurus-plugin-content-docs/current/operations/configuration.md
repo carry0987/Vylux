@@ -77,7 +77,7 @@ Vylux 在 S3-compatible `PutObject` 上傳時，會送出 `x-amz-checksum-algori
 | `HMAC_SECRET` | 是 | 無 | 圖片與媒體投遞 URL 簽名 |
 | `API_KEY` | 是 | 無 | 保護 `/api/*` 管理端點 |
 | `WEBHOOK_SECRET` | 是 | 無 | webhook callback `X-Signature` 的 HMAC 秘鑰 |
-| `KEY_TOKEN_SECRET` | 是 | 無 | `/api/key/{hash}` Bearer token 驗證秘鑰 |
+| `KEY_TOKEN_SECRET` | 是 | 無 | `/api/key/{id}` Bearer token 驗證秘鑰 |
 | `ENCRYPTION_KEY` | 是 | 無 | 包裝資料庫中 stored content key 的 KEK |
 
 ### 快速生成 secrets

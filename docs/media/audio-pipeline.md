@@ -15,7 +15,7 @@ Audio jobs are created through a domain-specific route:
 
 - `POST /api/audio/jobs`
 
-The request body is output-oriented. It does not use the old generic `type + options` schema and it does not require a discriminator like `media_kind`.
+The request body is output-oriented. It does not use the old generic `type + options` schema and it does not require a discriminator field such as `asset_type`.
 
 Typical request:
 

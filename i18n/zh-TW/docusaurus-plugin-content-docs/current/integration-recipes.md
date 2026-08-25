@@ -53,7 +53,7 @@ cover 與 thumbnail 都已經是 media bucket 內存在的衍生資產，不需�
 
 ## Recipe 2：接上加密 HLS 播放
 
-這條流程適用於影片 HLS 工作在開啟加密後完成的情境。
+這條流程適用於 audio 或 video 的 HLS 工作在開啟加密後完成的情境。
 
 目標：
 
@@ -67,12 +67,12 @@ cover 與 thumbnail 都已經是 media bucket 內存在的衍生資產，不需�
 4. 你的 backend 產生一個短效 Bearer token，payload 內必須包含相同 media `hash`
 5. 你的 frontend 用 playlist URL 與 token 初始化播放器
 6. 播放器會從 `/stream/{hash}/*` 抓 playlist 與 segments
-7. 播放器只在請求 `/api/key/{hash}` 時附上 `Authorization: Bearer {token}`
+7. 播放器只在請求 `results.encryption.key_endpoint`（通常是 `/api/key/{id}`）時附上 `Authorization: Bearer {token}`
 
 frontend 通常只需要兩個值：
 
 - playlist URL，例如 `https://media.example.com/stream/movie-2026-04-01/master.m3u8`
-- 給 `/api/key/movie-2026-04-01` 使用的短效 key token
+- 給 `results.encryption.key_endpoint` 使用的短效 key token
 
 不要這樣做：
 
@@ -107,7 +107,7 @@ frontend 通常只需要兩個值：
 
 - 應用回傳給前端的 cover / thumbnail URL 走的是 `/thumb`，不是 raw bucket key
 - 加密 HLS 播放走的是對應媒體結果的 public playlist route
-- `/api/key/{hash}` 在沒 token 時回 `401`，有合法 token 時回 `200`
+- `/api/key/{id}` 在沒 token 時回 `401`，有合法 token 時回 `200`
 - 公開客戶端永遠看不到 `API_KEY`、`HMAC_SECRET`、`KEY_TOKEN_SECRET`
 
 ## 相關文件

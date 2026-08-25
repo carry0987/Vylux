@@ -39,7 +39,7 @@ flowchart LR
 	HTTP -->|GET /thumb and GET /stream/*| Media[(Media Store)]
 	HTTP -->|POST /api/audio/jobs and POST /api/video/jobs| Redis[(Redis / asynq)]
 	HTTP -->|GET /api/jobs/:id| PG[(PostgreSQL)]
-	HTTP -->|GET /api/key/:hash| PG
+	HTTP -->|GET /api/key/:id| PG
 	Redis --> Worker[Vylux Worker]
 	Worker --> FFmpeg[FFmpeg / ffprobe]
 	Worker --> Packager[Shaka Packager]
@@ -55,7 +55,7 @@ flowchart LR
 | --- | --- |
 | HTTP server | serves `/img`, `/original`, `/thumb`, `/api/audio/jobs`, `/api/video/jobs`, `/api/jobs/:id`, `/stream`, `/api/key`, `/healthz`, `/readyz`, and `/metrics` |
 | Worker | consumes async jobs, downloads source media, runs audio and video processing workflows, and sends webhooks |
-| PostgreSQL | stores job rows, workflow results, retry metadata, wrapped content keys, and image cache tracking |
+| PostgreSQL | stores job rows, workflow results, retry metadata, stream encryption key records, and image cache tracking |
 | Redis | backs asynq queues, task state, and API/key endpoint rate limiting |
 | Source store | source bucket plus `SOURCE_S3_*`; immutable or upstream-managed source objects; Vylux reads from it |
 | Media store | media bucket plus `MEDIA_S3_*`; derived images, previews, covers, playlists, segments, and caches; Vylux reads and writes it |
@@ -69,7 +69,7 @@ flowchart LR
 - `/api/audio/jobs` and `/api/video/jobs` job creation
 - `/api/jobs/:id` job lookup
 - `/stream/{hash}/*` HLS asset proxying
-- `/api/key/{hash}` Bearer-token validation and 16-byte key delivery
+- `/api/key/{id}` Bearer-token validation and 16-byte key delivery
 - `/healthz`, `/readyz`, and `/metrics`
 
 The HTTP side also owns:

@@ -15,7 +15,7 @@ Current core capabilities include:
 - domain-specific async creation through `/api/audio/jobs` and `/api/video/jobs`
 - first-class audio outputs for HLS playback, MP3 download, FLAC download, and waveform generation
 - HLS CMAF output with AV1 and H.264 ladders
-- encrypted playback with Bearer-token key delivery through `/api/key/{hash}`
+- encrypted playback with Bearer-token key delivery through `/api/key/{id}`
 - PostgreSQL job state, Redis queues, Prometheus metrics, and OpenTelemetry tracing
 
 :::tip Start from the page that matches your job
@@ -50,7 +50,7 @@ This lets you use the same image for local development, Docker Compose, single-n
 - dual-codec ladders with AV1 and H.264
 - portrait and non-16:9 video output sizing
 - raw-key CBCS / SAMPLE-AES protected streaming
-- `/api/key/{hash}` Bearer-token key delivery
+- `/api/key/{id}` Bearer-token key delivery
 - PostgreSQL job state, Redis queues, Prometheus metrics, and OpenTelemetry tracing
 
 ## Recommended reading path

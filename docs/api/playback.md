@@ -1,6 +1,5 @@
----
 title: Playback API
-description: "Route layout, authorization model, and curl examples for `/stream/{hash}/*` and `/api/key/{hash}`."
+description: "Route layout, authorization model, and curl examples for `/stream/{hash}/*` and `/api/key/{id}`."
 ---
 
 # Playback API
@@ -15,7 +14,7 @@ description: "Route layout, authorization model, and curl examples for `/stream/
 
 ### Key delivery
 
-- endpoint: `GET /api/key/{hash}`
+- endpoint: `GET /api/key/{id}`
 - auth: `Authorization: Bearer {token}`
 - purpose: return the 16-byte content key for encrypted HLS playback
 
@@ -63,9 +62,9 @@ curl -I \
 For public playback, the entrypoint depends on the media result. Video HLS currently starts from `/stream/{hash}/master.m3u8`, while the audio-only HLS path currently starts from `/stream/{hash}/hls/master.m3u8`. Treat the object keys stored in job results as backing storage paths, not as browser-facing URLs.
 :::
 
-## `GET /api/key/{hash}`
+## `GET /api/key/{id}`
 
-`GET /api/key/{hash}`
+`GET /api/key/{id}`
 
 This endpoint does not use `X-API-Key`. It only accepts:
 
@@ -74,7 +73,7 @@ Authorization: Bearer {token}
 ```
 
 :::warning Do not move playback secrets into the browser
-`/api/key/{hash}` is intentionally separated from `X-API-Key`. Keep `KEY_TOKEN_SECRET` in a trusted backend or auth service, and never place Bearer tokens into playlist URLs or segment URLs.
+`/api/key/{id}` is intentionally separated from `X-API-Key`. Keep `KEY_TOKEN_SECRET` in a trusted backend or auth service, and never place Bearer tokens into playlist URLs or segment URLs.
 :::
 
 For the exact meaning of `KEY_TOKEN_SECRET` and related playback configuration such as `BASE_URL`, see [Configuration](../operations/configuration).
@@ -93,6 +92,7 @@ The signature covers the base64url payload string, not the raw JSON bytes.
 
 ```bash showLineNumbers
 MEDIA_HASH='movie-2026-04-01'
+KEY_ID='replace-with-key-id'
 KEY_TOKEN_SECRET='replace-with-key-token-secret'
 
 PAYLOAD="$(jq -cn \
@@ -117,11 +117,11 @@ TOKEN="$PAYLOAD_B64.$SIG_B64"
 ### curl examples
 
 ```bash showLineNumbers
-curl -i "http://localhost:3000/api/key/$MEDIA_HASH"
+curl -i "http://localhost:3000/api/key/$KEY_ID"
 
 curl -s \
     -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:3000/api/key/$MEDIA_HASH" \
+    "http://localhost:3000/api/key/$KEY_ID" \
     | wc -c
 ```
 
@@ -134,7 +134,7 @@ On success, the last command should print `16` because the endpoint returns the 
 | `200` | token verified and the content key was returned as `application/octet-stream` |
 | `401` | missing `Authorization: Bearer ...` header |
 | `403` | invalid signature, expired token, or hash mismatch |
-| `404` | no encryption key exists for the media hash |
+| `404` | no stream-key record exists for the key id |
 | `500` | unwrap failure or other internal error |
 
 This endpoint also uses a Redis-backed rate limit. The current default is 120 requests per minute, keyed by Bearer token or remote IP.
@@ -149,7 +149,8 @@ The usual flow is:
 2. your application authenticates the caller and checks authorization
 3. your application returns the public playlist URL `/stream/X/master.m3u8`
 4. your application also returns a short-lived Bearer token whose payload contains `hash=X`
-5. the player attaches that token only on `/api/key/X` requests
+5. your application also returns the stream-key id or key endpoint from the completed job result
+6. the player attaches that token only on `/api/key/{id}` requests
 
 Do not move `KEY_TOKEN_SECRET` into browser code, and do not place the token into playlist or segment URLs.
 
