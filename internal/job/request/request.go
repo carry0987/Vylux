@@ -12,7 +12,7 @@ import (
 	"Vylux/internal/queue"
 )
 
-// Normalized is the legacy-compatible request model consumed by the current job handler.
+// Normalized is the internal request model consumed by the current job handler.
 type Normalized struct {
 	Type        string
 	Hash        string
@@ -116,7 +116,7 @@ type structuredDeliveryRequest struct {
 	CallbackURL string `json:"callback_url"`
 }
 
-// Decode reads either the legacy or structured job request schema and normalizes it.
+// Decode reads the structured job request schema and normalizes it.
 func Decode(r io.Reader) (Normalized, error) {
 	var req rawJobRequest
 	dec := json.NewDecoder(r)
@@ -124,14 +124,10 @@ func Decode(r io.Reader) (Normalized, error) {
 	if err := dec.Decode(&req); err != nil {
 		return Normalized{}, err
 	}
-	if req.isStructured() {
-		return req.normalizeStructured()
+	if !req.isStructured() {
+		return Normalized{}, fmt.Errorf("job requests must use the structured asset_type/operation contract")
 	}
-	if strings.EqualFold(strings.TrimSpace(req.Type), queue.TypeAudioTranscode) {
-		return Normalized{}, fmt.Errorf("legacy audio requests are not supported; use POST /api/audio/jobs")
-	}
-
-	return req.normalizeLegacy(), nil
+	return req.normalizeStructured()
 }
 
 // DecodeAudioCreate reads the public audio create contract used by POST /api/audio/jobs.
@@ -256,19 +252,9 @@ func (r *rawJobRequest) isStructured() bool {
 	return r.AssetType != "" || r.Operation != "" || r.Pipeline != nil || r.Delivery != nil || r.Source.structured
 }
 
-func (r *rawJobRequest) normalizeLegacy() Normalized {
-	return Normalized{
-		Type:        r.Type,
-		Hash:        r.Hash,
-		Source:      r.Source.Key,
-		Options:     r.Options,
-		CallbackURL: r.CallbackURL,
-	}
-}
-
 func (r *rawJobRequest) normalizeStructured() (Normalized, error) {
 	if r.Type != "" || r.Hash != "" || r.Options != nil || r.CallbackURL != "" {
-		return Normalized{}, fmt.Errorf("structured requests cannot include legacy type/hash/options/callback_url fields")
+		return Normalized{}, fmt.Errorf("structured requests cannot include type/hash/options/callback_url fields")
 	}
 	assetType := strings.ToLower(strings.TrimSpace(r.AssetType))
 	operation := strings.ToLower(strings.TrimSpace(r.Operation))

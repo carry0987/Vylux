@@ -183,7 +183,7 @@ func TestCanonicalizeVideoFullDropsEmptyStages(t *testing.T) {
 	}
 }
 
-func TestDecodeRejectsStructuredLegacyMix(t *testing.T) {
+func TestDecodeRejectsMixedStructuredAndDeprecatedFields(t *testing.T) {
 	body := `{
 		"type":"audio:transcode",
 		"asset_type":"audio",
@@ -193,14 +193,14 @@ func TestDecodeRejectsStructuredLegacyMix(t *testing.T) {
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected structured/legacy mix to be rejected")
+		t.Fatal("expected mixed structured and deprecated fields to be rejected")
 	}
-	if !strings.Contains(err.Error(), "structured requests cannot include legacy") {
+	if !strings.Contains(err.Error(), "structured requests cannot include type/hash/options/callback_url fields") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestDecodeRejectsLegacyAudioRequest(t *testing.T) {
+func TestDecodeRejectsUnstructuredRequest(t *testing.T) {
 	body := `{
 		"type":"audio:transcode",
 		"hash":"hash123",
@@ -209,9 +209,9 @@ func TestDecodeRejectsLegacyAudioRequest(t *testing.T) {
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected legacy audio request to be rejected")
+		t.Fatal("expected unstructured request to be rejected")
 	}
-	if !strings.Contains(err.Error(), "use POST /api/audio/jobs") {
+	if !strings.Contains(err.Error(), "job requests must use the structured asset_type/operation contract") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -241,7 +241,7 @@ func TestDecodeStructuredAudioProcessDownloadProfiles(t *testing.T) {
 	}
 }
 
-func TestDecodeStructuredAudioProcessRejectsLegacyFlacProfileName(t *testing.T) {
+func TestDecodeStructuredAudioProcessRejectsUnsupportedFlacProfileName(t *testing.T) {
 	body := `{
 		"asset_type":"audio",
 		"operation":"process",
@@ -253,7 +253,7 @@ func TestDecodeStructuredAudioProcessRejectsLegacyFlacProfileName(t *testing.T) 
 
 	_, err := Decode(strings.NewReader(body))
 	if err == nil {
-		t.Fatal("expected legacy flac profile name to be rejected")
+		t.Fatal("expected unsupported flac profile name to be rejected")
 	}
 	if !strings.Contains(err.Error(), "unsupported pipeline.downloads profile") {
 		t.Fatalf("unexpected error: %v", err)
