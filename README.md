@@ -1,13 +1,14 @@
 # Vylux
 ![CI](https://github.com/carry0987/Vylux/actions/workflows/ci.yml/badge.svg)  
 
-**Vylux** is a standalone media processing service written in Go. It combines real-time image transformation with asynchronous media jobs for covers, animated previews, and HLS CMAF transcoding.
+**Vylux** is a standalone media processing service written in Go. It combines real-time image transformation with asynchronous audio and video jobs for waveforms, covers, animated previews, downloadable derivatives, and HLS CMAF packaging.
 
 ## What it does
 
 - Real-time image resize, format conversion, and signed delivery
-- Async media jobs over Redis/asynq
-- HLS CMAF output with AV1 and H.264 ladders
+- Async audio and video jobs over Redis/asynq
+- Audio-only HLS, MP3/FLAC download artifacts, and waveform generation
+- Video cover extraction, animated previews, and HLS CMAF output with AV1 and H.264 ladders
 - Encrypted playback with raw-key CBCS and token-protected key delivery
 - PostgreSQL job state, Prometheus metrics, and OpenTelemetry tracing
 
@@ -16,11 +17,27 @@
 - [Docs site](https://carry0987.github.io/Vylux/)
 - [Docs entry](https://carry0987.github.io/Vylux/docs/intro)
 - [Getting started](https://carry0987.github.io/Vylux/docs/getting-started)
+- [Audio pipeline](https://carry0987.github.io/Vylux/docs/media/audio-pipeline)
 - [Configuration](https://carry0987.github.io/Vylux/docs/operations/configuration)
 - [Testing](https://carry0987.github.io/Vylux/docs/development/testing)
 - [Architecture overview](https://carry0987.github.io/Vylux/docs/architecture/overview)
 
+## Published container image
+
+The official runtime image is `ghcr.io/carry0987/vylux:latest`.
+
+GitHub Actions builds and publishes it automatically from the release workflow, including a multi-platform manifest for `linux/amd64` and `linux/arm64`.
+
 ## Quick start
+
+For containerized deployment, copy the example environment file and start the repository `docker-compose.yml` directly:
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+For host-run local development, build Vylux locally and use `docker-compose.dev.yml` for infrastructure:
 
 ```bash
 git clone https://github.com/carry0987/vylux.git && cd vylux
@@ -72,7 +89,7 @@ Then run Vylux:
 
 In `--mode=worker`, Vylux starts a lightweight metrics listener on `WORKER_METRICS_PORT` (default `3001`) serving `/metrics` and `/healthz`.
 
-For containerized transcoding, Vylux always uses `/var/cache/vylux` as its scratch workspace. The image sets `TMPDIR` to that path and declares it as a Docker volume so large source downloads, intermediate encodes, and packaged HLS output stay on one disk-backed workspace by default.
+For containerized media processing, Vylux always uses `/var/cache/vylux` as its scratch workspace. The image sets `TMPDIR` to that path and declares it as a Docker volume so large source downloads, intermediate encodes, waveform generation, and packaged output stay on one disk-backed workspace by default.
 
 ## Testing
 
