@@ -144,28 +144,26 @@ func newSharedIntegrationEnv(ctx context.Context) (*sharedIntegrationEnv, error)
 
 func (e *sharedIntegrationEnv) close(ctx context.Context) error {
 	var firstErr error
-	if e.redisAdmin != nil {
-		if err := e.redisAdmin.Close(); err != nil && firstErr == nil {
+	setFirstErr := func(err error) {
+		if err != nil && firstErr == nil {
 			firstErr = err
 		}
+	}
+
+	if e.redisAdmin != nil {
+		setFirstErr(e.redisAdmin.Close())
 	}
 	if e.pool != nil {
 		e.pool.Close()
 	}
 	if e.rs != nil {
-		if err := e.rs.Terminate(ctx); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		setFirstErr(e.rs.Terminate(ctx))
 	}
 	if e.rd != nil {
-		if err := e.rd.Terminate(ctx); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		setFirstErr(e.rd.Terminate(ctx))
 	}
 	if e.pg != nil {
-		if err := e.pg.Terminate(ctx); err != nil && firstErr == nil {
-			firstErr = err
-		}
+		setFirstErr(e.pg.Terminate(ctx))
 	}
 	return firstErr
 }

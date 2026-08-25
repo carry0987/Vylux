@@ -3,8 +3,10 @@ linters:
   enable:
     - bodyclose
     - gocritic
+    - govet
     - misspell
     - nilerr
+    - staticcheck
   settings:
     gocritic:
       enabled-tags:
