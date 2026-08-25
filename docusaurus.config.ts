@@ -5,7 +5,7 @@ import { themes as prismThemes } from 'prism-react-renderer';
 const config: Config = {
     title: 'Vylux',
     tagline:
-        'An independent media processing service for real-time images, video previews, and encrypted HLS CMAF streaming.',
+        'An independent media processing service for real-time images, first-class audio and video jobs, and encrypted HLS streaming.',
     favicon: 'img/favicon.ico',
 
     // Set the production url of your site here

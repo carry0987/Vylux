@@ -143,7 +143,7 @@ If `curl http://localhost:<PORT>/healthz` returns connection refused, the contai
 :::
 
 :::warning Cloudflare Tunnel returns `502`
-If `cloudflared` logs show `dial tcp [::1]:3100` or `127.0.0.1:3100`, the tunnel origin is pointed at `localhost` inside the tunnel container. Use `http://vylux:<PORT>` instead.
+If `cloudflared` logs show `dial tcp [::1]:3000` or `127.0.0.1:3000`, the tunnel origin is pointed at `localhost` inside the tunnel container. Use `http://app:<PORT>` instead.
 :::
 
 :::info `/healthz` is green but `/readyz` is red

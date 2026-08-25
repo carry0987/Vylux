@@ -26,6 +26,8 @@ In this workflow, `localhost` inside `DATABASE_URL`, `REDIS_URL`, `SOURCE_S3_END
 
 Use the repository `docker-compose.yml` when Vylux itself should also run inside Docker.
 
+That file pulls the published `ghcr.io/carry0987/vylux:latest` image, which is built automatically by GitHub Actions and published as a native multi-platform image for `linux/amd64` and `linux/arm64`.
+
 In that workflow, `localhost` inside Vylux no longer points to your Mac. Use container-reachable addresses such as compose service names or an external endpoint instead.
 
 ### 1. Start the infrastructure services

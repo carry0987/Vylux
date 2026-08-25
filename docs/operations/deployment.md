@@ -22,6 +22,17 @@ That means:
 
 This keeps the smallest deployment shape convenient while still supporting split roles later.
 
+## Published image
+
+The official container image is published at `ghcr.io/carry0987/vylux:latest`.
+
+The release workflow in `.github/workflows/docker.yml` builds and publishes the image automatically with GitHub Actions. It pushes both versioned tags and `latest`, then publishes a multi-platform manifest for:
+
+- `linux/amd64`
+- `linux/arm64`
+
+Unless you are testing an unreleased Dockerfile change, standard Docker Compose and Kubernetes deployments can pull this image directly without building locally.
+
 ## Local development
 
 The most common local shape is:
@@ -76,7 +87,7 @@ The image sets `TMPDIR=/var/cache/vylux` and declares `/var/cache/vylux` as a Do
 
 ## Docker Compose deployment
 
-The repository `docker-compose.yml` uses a single `vylux` service in the default `all` mode and also starts:
+The repository `docker-compose.yml` runs the published `ghcr.io/carry0987/vylux:latest` image as the `app` service in the default `all` mode and also starts:
 
 - PostgreSQL
 - Redis
@@ -88,37 +99,49 @@ Operational notes:
 - `/var/cache/vylux` is mounted as the dedicated scratch volume
 - the image also sets `TMPDIR=/var/cache/vylux`, so tool-level temp files land on the same workspace
 - there is no separate key tmpfs mount because raw encryption keys are passed directly to Shaka Packager and are not staged as files on disk
-- a `ports:` mapping is only required if you want direct host access such as `http://localhost:3000` or `http://localhost:3100`
+- by default, the repository compose file does not publish host ports
+- a `ports:` mapping is only required if you want direct host access such as `http://localhost:3000`
 
-Minimal startup:
+Minimal startup after preparing `.env`:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
+```
+
+`--build` is not required for the default file because it pulls the published GHCR image. Use `--build` only after switching the service to a local `build:` stanza or another custom image workflow.
+
+If you want direct host access, add a port mapping to the `app` service:
+
+```yml showLineNumbers
+services:
+  app:
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
 ```
 
 :::tip When `ports:` is optional
-If all external traffic goes through Cloudflare Tunnel, the `vylux` service does not need a host `ports:` mapping. Keep `ports:` only when you also want direct host-side access for local browser or `curl` testing.
+If all external traffic goes through Cloudflare Tunnel, the `app` service does not need a host `ports:` mapping. Keep `ports:` only when you also want direct host-side access for local browser or `curl` testing.
 :::
 
 ### Container-network semantics
 
 Inside `docker-compose.yml`, each container gets its own `localhost`. That means:
 
-- `localhost` inside the `vylux` container points back to the `vylux` container itself
-- `localhost` inside the `tunnel` container points back to `cloudflared`, not to `vylux`
-- cross-container traffic should use compose service names such as `postgres`, `redis`, and `vylux`
+- `localhost` inside the `app` container points back to the `app` container itself
+- `localhost` inside the `tunnel` container points back to `cloudflared`, not to `app`
+- cross-container traffic should use compose service names such as `app`, `postgres`, and `redis`
 
 If you run Vylux itself inside compose, do not reuse host-only examples such as `SOURCE_S3_ENDPOINT=http://localhost:9002` unless the storage endpoint is actually reachable from inside that container.
 
 ### Cloudflare Tunnel sidecar
 
 :::warning `localhost` is the wrong tunnel origin in Docker
-When `cloudflared` runs in Docker, `http://localhost:3100` points back to the tunnel container itself, not to the `vylux` service.
+When `cloudflared` runs in Docker, `http://localhost:3000` points back to the tunnel container itself, not to the `app` service.
 :::
 
-The tunnel sidecar shares the compose network with `vylux`, so the origin service should be configured with the compose service name, for example `http://vylux:3100`.
+The tunnel sidecar shares the compose network with `app`, so the origin service should be configured with the compose service name, for example `http://app:3000`.
 
-Do not point the tunnel origin at `http://localhost:3100` when `cloudflared` runs in Docker. In that case `localhost` resolves inside the tunnel container and typically produces `502` errors with logs like `dial tcp [::1]:3100: connect: connection refused`.
+Do not point the tunnel origin at `http://localhost:3000` when `cloudflared` runs in Docker. In that case `localhost` resolves inside the tunnel container and typically produces `502` errors with logs like `dial tcp [::1]:3000: connect: connection refused`.
 
 ## Split mode
 

@@ -45,10 +45,10 @@ Vylux 主要透過環境變數配置。實作上，CLI `--mode` 會覆蓋 `MODE`
 - `REDIS_URL=redis://redis:6379`
 - `SOURCE_S3_ENDPOINT` 與 `MEDIA_S3_ENDPOINT` 應使用 compose 可達的 hostname，例如 `http://rustfs:9000`，或外部 URL
 
-這個規則對 sidecar 也一樣成立。若 `cloudflared` 跑在 Docker 裡，`http://localhost:3100` 只會回到 tunnel 容器自己，不會連到 `vylux`。
+這個規則對 sidecar 也一樣成立。若 `cloudflared` 跑在 Docker 裡，`http://localhost:3000` 只會回到 tunnel 容器自己，不會連到 `app`。
 
 :::warning `TUNNEL_TOKEN` 不會幫你決定 origin target
-`TUNNEL_TOKEN` 只負責讓 tunnel process 驗證通過。Cloudflare Tunnel 的 ingress target 仍要另外設定；當 `cloudflared` 以 compose sidecar 方式運行時，origin 應指向 `http://vylux:<PORT>`，而不是 `http://localhost:<PORT>`。
+`TUNNEL_TOKEN` 只負責讓 tunnel process 驗證通過。Cloudflare Tunnel 的 ingress target 仍要另外設定；當 `cloudflared` 以 compose sidecar 方式運行時，origin 應指向 `http://app:<PORT>`，而不是 `http://localhost:<PORT>`。
 :::
 
 ## 物件儲存

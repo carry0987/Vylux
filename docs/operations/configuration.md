@@ -45,10 +45,10 @@ Vylux is configured almost entirely through environment variables. In practice, 
 - `REDIS_URL=redis://redis:6379`
 - `SOURCE_S3_ENDPOINT` and `MEDIA_S3_ENDPOINT` should use a compose-reachable hostname such as `http://rustfs:9000`, or an external URL
 
-The same rule applies to sidecars. If `cloudflared` runs in Docker, `http://localhost:3100` points back to the tunnel container, not to the `vylux` service.
+The same rule applies to sidecars. If `cloudflared` runs in Docker, `http://localhost:3000` points back to the tunnel container, not to the `app` service.
 
 :::warning `TUNNEL_TOKEN` does not define the origin target
-`TUNNEL_TOKEN` only authenticates the tunnel process. The Cloudflare Tunnel ingress target still has to be configured separately, and when `cloudflared` runs as a compose sidecar it should point to `http://vylux:<PORT>`, not `http://localhost:<PORT>`.
+`TUNNEL_TOKEN` only authenticates the tunnel process. The Cloudflare Tunnel ingress target still has to be configured separately, and when `cloudflared` runs as a compose sidecar it should point to `http://app:<PORT>`, not `http://localhost:<PORT>`.
 :::
 
 ## Object storage

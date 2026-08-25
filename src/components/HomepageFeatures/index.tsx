@@ -21,16 +21,16 @@ const FeatureList: FeatureItem[] = [
         title: 'One service, two workloads',
         descriptionId: 'homepage.features.runtime.description',
         description:
-            'Vylux combines synchronous image delivery with asynchronous media jobs while keeping storage, queueing, and routing conventions consistent.',
+            'Vylux combines synchronous image delivery with asynchronous audio and video jobs while keeping storage, queueing, and routing conventions consistent.',
     },
     {
         eyebrowId: 'homepage.features.streaming.eyebrow',
-        eyebrow: 'Streaming',
+        eyebrow: 'Pipelines',
         titleId: 'homepage.features.streaming.title',
-        title: 'Modern video pipeline',
+        title: 'First-class audio and video pipelines',
         descriptionId: 'homepage.features.streaming.description',
         description:
-            'FFmpeg handles encoding, Shaka Packager builds HLS CMAF, and the service supports AV1 and H.264 ladders with encrypted key delivery.',
+            'FFmpeg and ffprobe drive analysis and encoding, Shaka Packager builds HLS outputs, and the service supports audio artifacts, video ladders, and encrypted key delivery.',
     },
     {
         eyebrowId: 'homepage.features.operations.eyebrow',

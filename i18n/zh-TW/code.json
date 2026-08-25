@@ -327,15 +327,15 @@
     "description": "The title of the tag list page"
   },
   "site.tagline": {
-    "message": "獨立運行的媒體處理服務，涵蓋圖片即時轉換、影片預覽與加密 HLS CMAF 串流。",
+    "message": "獨立運行的媒體處理服務，涵蓋圖片即時轉換、第一級音訊與影片工作流，以及加密 HLS 串流。",
     "description": "The site tagline"
   },
   "homepage.hero.subtitle": {
-    "message": "獨立運行的媒體處理服務，涵蓋圖片即時轉換、影片預覽與加密 HLS CMAF 串流。",
+    "message": "獨立運行的媒體處理服務，涵蓋圖片即時轉換、第一級音訊與影片工作流，以及加密 HLS 串流。",
     "description": "Homepage hero subtitle"
   },
   "homepage.layout.description": {
-    "message": "Vylux 文件站，涵蓋系統架構、HTTP API、媒體處理流程與維運細節。",
+    "message": "Vylux 文件站，涵蓋系統架構、HTTP API、音訊與影片處理流程，以及維運細節。",
     "description": "The homepage metadata description"
   },
   "homepage.hero.kicker": {
@@ -359,7 +359,7 @@
     "description": "Homepage validated scope image bullet"
   },
   "homepage.hero.scope.video": {
-    "message": "影片封面、動態預覽與 HLS CMAF 轉碼",
+    "message": "音訊 HLS、MP3/FLAC、waveform，以及影片封面、動態預覽與 HLS CMAF",
     "description": "Homepage validated scope video bullet"
   },
   "homepage.hero.scope.encryption": {
@@ -387,19 +387,19 @@
     "description": "Runtime feature title"
   },
   "homepage.features.runtime.description": {
-    "message": "Vylux 把同步圖片服務與非同步媒體任務放進同一個系統，同時維持一致的 storage、queue 與路由慣例。",
+    "message": "Vylux 把同步圖片服務與非同步音訊、影片任務放進同一個系統，同時維持一致的 storage、queue 與路由慣例。",
     "description": "Runtime feature description"
   },
   "homepage.features.streaming.eyebrow": {
-    "message": "串流",
+    "message": "處理流程",
     "description": "Streaming feature eyebrow"
   },
   "homepage.features.streaming.title": {
-    "message": "現代化影片處理流程",
+    "message": "第一級音訊與影片處理流程",
     "description": "Streaming feature title"
   },
   "homepage.features.streaming.description": {
-    "message": "FFmpeg 負責編碼，Shaka Packager 產生 HLS CMAF，並支援 AV1 與 H.264 ladder 以及加密金鑰發放。",
+    "message": "FFmpeg 與 ffprobe 負責分析與編碼，Shaka Packager 產生 HLS 輸出，並支援音訊產物、影片 ladder 與加密金鑰發放。",
     "description": "Streaming feature description"
   },
   "homepage.features.operations.eyebrow": {

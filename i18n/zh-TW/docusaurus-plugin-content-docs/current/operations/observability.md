@@ -156,7 +156,7 @@ service:
 :::
 
 :::warning Cloudflare Tunnel 回 `502`
-如果 `cloudflared` 日誌出現 `dial tcp [::1]:3100` 或 `127.0.0.1:3100`，代表 tunnel origin 指到了 tunnel 容器裡的 `localhost`；此時應改成 `http://vylux:<PORT>`。
+如果 `cloudflared` 日誌出現 `dial tcp [::1]:3000` 或 `127.0.0.1:3000`，代表 tunnel origin 指到了 tunnel 容器裡的 `localhost`；此時應改成 `http://app:<PORT>`。
 :::
 
 :::info `/healthz` 是綠的，但 `/readyz` 是紅的

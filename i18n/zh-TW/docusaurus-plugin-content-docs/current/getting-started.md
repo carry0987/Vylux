@@ -26,6 +26,8 @@ description: "用最短路徑在本機啟動 Vylux、準備依賴、建立第一
 
 使用 repo 內的 `docker-compose.yml`，讓 Vylux 本體也一起跑在 Docker 裡。
 
+這個檔案會直接 pull 已發布的 `ghcr.io/carry0987/vylux:latest` image。它由 GitHub Actions 自動建置與發布，並原生提供 `linux/amd64` 與 `linux/arm64` 的 multi-platform image。
+
 這種流程下，Vylux 看到的 `localhost` 已經不再是你的 Mac，而是 Vylux 容器自己；此時應改用 compose service name 或外部 endpoint。
 
 ### 1. 啟動基礎設施

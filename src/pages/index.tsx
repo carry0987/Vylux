@@ -24,8 +24,8 @@ function HomepageHeader() {
                     </Heading>
                     <p className={styles.heroSubtitle}>
                         <Translate id="homepage.hero.subtitle">
-                            An independent media processing service for real-time images, video previews, and encrypted
-                            HLS CMAF streaming.
+                            An independent media processing service for real-time images, first-class audio and video
+                            jobs, and encrypted HLS streaming.
                         </Translate>
                     </p>
                     <div className={styles.buttons}>
@@ -49,7 +49,7 @@ function HomepageHeader() {
                         </li>
                         <li>
                             <Translate id="homepage.hero.scope.video">
-                                Video cover generation, animated previews, and HLS CMAF transcoding
+                                Audio HLS, MP3/FLAC, waveform generation, plus video covers, previews, and HLS CMAF
                             </Translate>
                         </li>
                         <li>
@@ -78,7 +78,7 @@ export default function Home(): ReactNode {
             description={translate({
                 id: 'homepage.layout.description',
                 message:
-                    'Vylux documentation covering system architecture, HTTP APIs, media pipelines, and operational details.',
+                    'Vylux documentation covering system architecture, HTTP APIs, audio and video pipelines, and operational details.',
             })}>
             <HomepageHeader />
             <main>
