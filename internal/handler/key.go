@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"uuid"
 
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
@@ -20,7 +21,7 @@ import (
 
 // KeyHandler serves the AES-128 decryption key for encrypted HLS streams.
 //
-// Endpoint: GET /api/key/:hash
+// Endpoint: GET /api/key/:id
 //   - Authorization: Bearer {token}
 //
 // The handler verifies the token (HMAC-SHA256 signature, expiration, and hash match),
@@ -46,11 +47,11 @@ type keyTokenPayload struct {
 	Exp  int64  `json:"exp"` // Unix timestamp
 }
 
-// Handle serves GET /api/key/:hash.
+// Handle serves GET /api/key/:id.
 func (h *KeyHandler) Handle(c *echo.Context) error {
-	hash := c.Param("hash")
-	if hash == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "missing hash")
+	id := c.Param("id")
+	if id == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "missing key id")
 	}
 
 	// Extract token from Authorization header.
@@ -63,21 +64,28 @@ func (h *KeyHandler) Handle(c *echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Unauthorized")
 	}
 
-	// Verify token.
-	if err := h.verifyToken(token, hash); err != nil {
+	payload, err := h.verifyToken(token)
+	if err != nil {
 		return c.String(http.StatusForbidden, "Forbidden")
 	}
 
 	// Fetch from DB.
 	ctx := c.Request().Context()
-	row, err := h.queries.GetEncryptionKey(ctx, hash)
+	keyID, err := uuid.Parse(id)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid key id")
+	}
+	row, err := h.queries.GetStreamEncryptionKey(ctx, keyID)
 	if err != nil {
 		return c.String(http.StatusNotFound, "Not Found")
+	}
+	if payload.Hash != row.SourceHash {
+		return c.String(http.StatusForbidden, "Forbidden")
 	}
 
 	aesKey, err := h.wrapper.Unwrap(row.WrappedKey, row.WrapNonce, row.KekVersion)
 	if err != nil {
-		slog.Error("unwrap encryption key failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
+		slog.Error("unwrap encryption key failed", apptracing.LogFields(ctx, "key_id", id, "hash", row.SourceHash, "error", err)...)
 		return c.String(http.StatusInternalServerError, "Internal Server Error")
 	}
 
@@ -85,13 +93,13 @@ func (h *KeyHandler) Handle(c *echo.Context) error {
 	return c.Blob(http.StatusOK, "application/octet-stream", aesKey)
 }
 
-// verifyToken validates the HMAC-SHA256 token against the requested hash.
+// verifyToken validates the HMAC-SHA256 token signature and expiration.
 //
 // Token format: base64url( JSON({ "hash": "...", "exp": <unix> }) ) + "." + base64url( HMAC-SHA256(payload, secret) )
-func (h *KeyHandler) verifyToken(token, expectedHash string) error {
+func (h *KeyHandler) verifyToken(token string) (*keyTokenPayload, error) {
 	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid token format")
+		return nil, fmt.Errorf("invalid token format")
 	}
 
 	payloadB64, sigB64 := parts[0], parts[1]
@@ -99,12 +107,12 @@ func (h *KeyHandler) verifyToken(token, expectedHash string) error {
 	// Decode and verify HMAC signature.
 	payloadBytes, err := base64.RawURLEncoding.DecodeString(payloadB64)
 	if err != nil {
-		return fmt.Errorf("decode payload: %w", err)
+		return nil, fmt.Errorf("decode payload: %w", err)
 	}
 
 	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
 	if err != nil {
-		return fmt.Errorf("decode signature: %w", err)
+		return nil, fmt.Errorf("decode signature: %w", err)
 	}
 
 	mac := hmac.New(sha256.New, []byte(h.keyTokenSecret))
@@ -112,24 +120,19 @@ func (h *KeyHandler) verifyToken(token, expectedHash string) error {
 	expectedSig := mac.Sum(nil)
 
 	if !hmac.Equal(sigBytes, expectedSig) {
-		return fmt.Errorf("invalid signature")
+		return nil, fmt.Errorf("invalid signature")
 	}
 
 	// Parse payload.
 	var payload keyTokenPayload
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
-		return fmt.Errorf("unmarshal payload: %w", err)
+		return nil, fmt.Errorf("unmarshal payload: %w", err)
 	}
 
 	// Check expiration.
 	if time.Now().Unix() > payload.Exp {
-		return fmt.Errorf("token expired")
+		return nil, fmt.Errorf("token expired")
 	}
 
-	// Check hash match.
-	if payload.Hash != expectedHash {
-		return fmt.Errorf("hash mismatch")
-	}
-
-	return nil
+	return &payload, nil
 }

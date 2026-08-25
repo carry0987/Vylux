@@ -184,7 +184,7 @@ func (s *Server) registerRoutes() {
 		s.cfg.KeyTokenSecret,
 		s.deps.KeyWrapper,
 	)
-	s.echo.GET("/api/key/:hash", keyHandler.Handle,
+	s.echo.GET("/api/key/:id", keyHandler.Handle,
 		custommw.RedisRateLimit(s.deps.Redis, "key", 120, time.Minute, func(c *echo.Context) string {
 			auth := c.Request().Header.Get("Authorization")
 			if after, ok := strings.CutPrefix(auth, "Bearer "); ok {

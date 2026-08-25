@@ -94,7 +94,7 @@ func HandleVideoTranscode(d *Deps) func(context.Context, *asynq.Task) error {
 			encryptCtx, span := startWorkerSpan(ctx, "worker.video.setup_encryption",
 				attribute.String("media.hash", p.Hash),
 			)
-			encMaterial, err = encryption.SetupHLSEncryption(encryptCtx, p.Hash, d.Config.BaseURL, d.Queries, d.KeyWrapper)
+			encMaterial, err = encryption.SetupHLSEncryption(encryptCtx, p.Hash, encryption.AssetTypeVideo, d.Config.BaseURL, d.Queries, d.KeyWrapper)
 			if err != nil {
 				recordSpanError(span, err)
 				span.End()

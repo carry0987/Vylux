@@ -32,7 +32,7 @@ type taskInspector interface {
 
 type queries interface {
 	ListJobsByHash(ctx context.Context, hash string) ([]dbq.Job, error)
-	DeleteEncryptionKey(ctx context.Context, hash string) error
+	DeleteStreamEncryptionKeysBySourceHash(ctx context.Context, sourceHash string) error
 	DeleteJobsByHash(ctx context.Context, hash string) error
 	ListImageCacheEntriesByHash(ctx context.Context, hash string) ([]dbq.ImageCacheEntry, error)
 	DeleteImageCacheEntriesByHash(ctx context.Context, hash string) error
@@ -309,7 +309,7 @@ func (c *Cleaner) deleteTrackedImageCaches(ctx context.Context, hash string) (St
 }
 
 func (c *Cleaner) deleteEncryptionKey(ctx context.Context, hash string) StageResult {
-	if err := c.queries.DeleteEncryptionKey(ctx, hash); err != nil {
+	if err := c.queries.DeleteStreamEncryptionKeysBySourceHash(ctx, hash); err != nil {
 		slog.Warn("cleanup: delete encryption key failed", apptracing.LogFields(ctx, "hash", hash, "error", err)...)
 		return StageResult{Status: "failed", Error: err.Error()}
 	}
