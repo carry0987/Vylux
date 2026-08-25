@@ -1,7 +1,7 @@
 name: vylux
 services:
   app:
-    build: .
+    image: ghcr.io/carry0987/vylux:latest
     restart: unless-stopped
     environment:
       TZ: UTC
