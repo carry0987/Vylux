@@ -54,4 +54,5 @@ pids
 # Github Pages
 .docusaurus
 build
+tools
 node_modules
