@@ -1,15 +1,15 @@
 # Vylux
 ![CI](https://github.com/carry0987/Vylux/actions/workflows/ci.yml/badge.svg)  
 
-**Vylux** is a standalone media processing service written in Go. It combines real-time image transformation with asynchronous audio and video jobs for waveforms, covers, animated previews, downloadable derivatives, and HLS CMAF packaging.
+**Vylux** is a standalone media processing service written in Go. It combines real-time image transformation with asynchronous audio and video workflows for waveforms, covers, animated previews, protected streaming, downloadable derivatives, and HLS CMAF packaging.
 
 ## What it does
 
 - Real-time image resize, format conversion, and signed delivery
 - Async audio and video jobs over Redis/asynq
-- Audio-only HLS, MP3/FLAC download artifacts, and waveform generation
+- Audio-only HLS, protected audio HLS, MP3/FLAC download artifacts, and waveform generation
 - Video cover extraction, animated previews, and HLS CMAF output with AV1 and H.264 ladders
-- Encrypted playback with raw-key CBCS and token-protected key delivery
+- Asset-scoped encrypted playback with raw-key CBCS and token-protected key delivery
 - PostgreSQL job state, Prometheus metrics, and OpenTelemetry tracing
 
 ## Read the docs
