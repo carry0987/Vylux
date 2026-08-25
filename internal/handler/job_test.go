@@ -195,6 +195,25 @@ func TestDecodeAudioJobRequest(t *testing.T) {
 	}
 }
 
+func TestDecodeImageJobRequest(t *testing.T) {
+	body := `{
+		"source":{"hash":"hash123","key":"uploads/image.png"},
+		"pipeline":{"outputs":[{"variant":"thumbnail","width":320,"format":"webp"}]},
+		"delivery":{"callback_url":"https://example.com/callback"}
+	}`
+
+	req, err := decodeImageJobRequestContext(t, body)
+	if err != nil {
+		t.Fatalf("decodeImageJobRequest: %v", err)
+	}
+	if req.Type != queue.TypeImageThumbnail {
+		t.Fatalf("type = %q, want %q", req.Type, queue.TypeImageThumbnail)
+	}
+	if req.Hash != "hash123" || req.Source != "uploads/image.png" {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+}
+
 func TestDecodeVideoJobRequest(t *testing.T) {
 	body := `{
 		"source":{"hash":"hash123","key":"uploads/video.mp4"},
@@ -333,6 +352,16 @@ func decodeAudioJobRequestContext(t *testing.T, body string) (JobRequest, error)
 	resp := httptest.NewRecorder()
 	c := e.NewContext(req, resp)
 	return decodeAudioJobRequest(c)
+}
+
+func decodeImageJobRequestContext(t *testing.T, body string) (JobRequest, error) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/image/jobs", bytes.NewBufferString(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	resp := httptest.NewRecorder()
+	c := e.NewContext(req, resp)
+	return decodeImageJobRequest(c)
 }
 
 func decodeVideoJobRequestContext(t *testing.T, body string) (JobRequest, error) {

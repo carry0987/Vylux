@@ -129,6 +129,16 @@ func (h *JobHandler) CreateAudio(c *echo.Context) error {
 	return h.createRequest(c, req)
 }
 
+// CreateImage handles POST /api/image/jobs.
+func (h *JobHandler) CreateImage(c *echo.Context) error {
+	req, err := decodeImageJobRequest(c)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	return h.createRequest(c, req)
+}
+
 // CreateVideo handles POST /api/video/jobs.
 func (h *JobHandler) CreateVideo(c *echo.Context) error {
 	req, err := decodeVideoJobRequest(c)
@@ -291,6 +301,21 @@ func validateJobRequest(r *JobRequest) error {
 
 func decodeAudioJobRequest(c *echo.Context) (JobRequest, error) {
 	normalized, err := jobrequest.DecodeAudioCreate(c.Request().Body)
+	if err != nil {
+		return JobRequest{}, err
+	}
+
+	return JobRequest{
+		Type:        normalized.Type,
+		Hash:        normalized.Hash,
+		Source:      normalized.Source,
+		Options:     normalized.Options,
+		CallbackURL: normalized.CallbackURL,
+	}, nil
+}
+
+func decodeImageJobRequest(c *echo.Context) (JobRequest, error) {
+	normalized, err := jobrequest.DecodeImageCreate(c.Request().Body)
 	if err != nil {
 		return JobRequest{}, err
 	}

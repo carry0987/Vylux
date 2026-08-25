@@ -149,6 +149,21 @@ func DecodeAudioCreate(r io.Reader) (Normalized, error) {
 	return req.normalizeStructuredAudioProcess()
 }
 
+// DecodeImageCreate reads the public image create contract used by POST /api/image/jobs.
+func DecodeImageCreate(r io.Reader) (Normalized, error) {
+	var req rawJobRequest
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		return Normalized{}, err
+	}
+	if req.Type != "" || req.Hash != "" || req.Options != nil || req.CallbackURL != "" || req.MediaKind != "" || req.Operation != "" {
+		return Normalized{}, fmt.Errorf("image create requests must use the /api/image/jobs contract without type/hash/options/callback_url/media_kind/operation fields")
+	}
+
+	return req.normalizeStructuredImageProcess()
+}
+
 // DecodeVideoCreate reads the public video create contract used by POST /api/video/jobs.
 func DecodeVideoCreate(r io.Reader) (Normalized, error) {
 	var req rawJobRequest

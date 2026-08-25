@@ -73,6 +73,63 @@ func TestAudioJobCreate_Unauthorized(t *testing.T) {
 	}
 }
 
+// TestImageJobCreate_Success verifies that image job creation succeeds on the domain route.
+func TestImageJobCreate_Success(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ts, cfg, store, cleanup := newTestServerWithStore(t)
+	defer cleanup()
+	if err := store.Put(t.Context(), cfg.SourceBucket, "uploads/test.png", bytes.NewReader([]byte("image")), "image/png"); err != nil {
+		t.Fatalf("upload source fixture: %v", err)
+	}
+
+	body := map[string]any{
+		"source": map[string]any{
+			"hash": "image123def456",
+			"key":  "uploads/test.png",
+		},
+		"pipeline": map[string]any{
+			"outputs": []map[string]any{{
+				"variant": "thumbnail",
+				"width":   320,
+				"format":  "webp",
+			}},
+		},
+		"delivery": map[string]any{
+			"callback_url": "http://example.com/callback",
+		},
+	}
+	jsonBody, _ := json.Marshal(body)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/image/jobs", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", cfg.APIKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/image/jobs: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200-202, got %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result handler.JobResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Hash != "image123def456" {
+		t.Errorf("expected hash %q, got %q", "image123def456", result.Hash)
+	}
+	if result.Status != "queued" && result.Status != "completed" {
+		t.Errorf("expected status queued or completed, got %q", result.Status)
+	}
+}
+
 // TestVideoJobCreate_Success verifies that video job creation succeeds on the domain route.
 func TestVideoJobCreate_Success(t *testing.T) {
 	if testing.Short() {

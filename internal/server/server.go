@@ -147,6 +147,11 @@ func (s *Server) registerRoutes() {
 			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))
 		}),
 	)
+	api.POST("/image/jobs", jobHandler.CreateImage,
+		custommw.RedisRateLimit(s.deps.Redis, "jobs", 30, time.Minute, func(c *echo.Context) string {
+			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))
+		}),
+	)
 	api.POST("/video/jobs", jobHandler.CreateVideo,
 		custommw.RedisRateLimit(s.deps.Redis, "jobs", 30, time.Minute, func(c *echo.Context) string {
 			return custommw.HashRateLimitKey(c.Request().Header.Get("X-API-Key"))

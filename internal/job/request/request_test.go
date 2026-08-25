@@ -89,6 +89,48 @@ func TestDecodeAudioCreateRejectsStructuredJobDiscriminatorFields(t *testing.T) 
 	}
 }
 
+func TestDecodeImageCreate(t *testing.T) {
+	body := `{
+		"source":{"hash":"hash123","key":"uploads/image.png"},
+		"pipeline":{"outputs":[{"variant":"thumbnail","width":320,"format":"webp"}]},
+		"delivery":{"callback_url":"https://example.com/callback"}
+	}`
+
+	req, err := DecodeImageCreate(strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("DecodeImageCreate: %v", err)
+	}
+	if req.Type != queue.TypeImageThumbnail {
+		t.Fatalf("type = %q, want %q", req.Type, queue.TypeImageThumbnail)
+	}
+	if req.Hash != "hash123" || req.Source != "uploads/image.png" {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+	outputs, ok := req.Options["outputs"].([]map[string]any)
+	if !ok || len(outputs) != 1 || outputs[0]["variant"] != "thumbnail" {
+		t.Fatalf("unexpected options: %#v", req.Options)
+	}
+	if req.CallbackURL != "https://example.com/callback" {
+		t.Fatalf("callback_url = %q", req.CallbackURL)
+	}
+}
+
+func TestDecodeImageCreateRejectsStructuredJobDiscriminatorFields(t *testing.T) {
+	body := `{
+		"media_kind":"image",
+		"operation":"process",
+		"source":{"hash":"hash123","key":"uploads/image.png"}
+	}`
+
+	_, err := DecodeImageCreate(strings.NewReader(body))
+	if err == nil {
+		t.Fatal("expected discriminator fields to be rejected")
+	}
+	if !strings.Contains(err.Error(), "/api/image/jobs contract") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestDecodeVideoCreate(t *testing.T) {
 	body := `{
 		"source":{"hash":"hash123","key":"uploads/video.mp4"},
