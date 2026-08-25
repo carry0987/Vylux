@@ -34,7 +34,7 @@ Keeping them on the docs branch gives you:
 Install the optional RustFS dependency with:
 
 ```bash showLineNumbers
-+python3 -m pip install boto3
+python3 -m pip install boto3
 ```
 
 ## Environment loading order
