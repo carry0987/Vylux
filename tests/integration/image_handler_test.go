@@ -15,15 +15,12 @@ import (
 
 	"Vylux/internal/cache"
 	"Vylux/internal/config"
-	"Vylux/internal/db"
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
 	"Vylux/internal/queue"
 	"Vylux/internal/server"
 	"Vylux/internal/signature"
 	"Vylux/internal/storage"
-	"Vylux/migrations"
-	"Vylux/tests/testutil"
 
 	redis "github.com/redis/go-redis/v9"
 )
@@ -36,79 +33,51 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 	}
 
 	ctx := context.Background()
-
-	pg := testutil.StartPostgres(ctx, t)
-	rd := testutil.StartRedis(ctx, t)
-	rs := testutil.StartRustFS(ctx, t)
-
-	if err := testutil.CreateBuckets(ctx, rs.Endpoint, rs.AccessKey, rs.SecretKey, rs.Region, "source", "media"); err != nil {
-		t.Fatalf("create rustfs buckets: %v", err)
+	integrationEnv.mu.Lock()
+	locked := true
+	release := func() {
+		if locked {
+			integrationEnv.mu.Unlock()
+			locked = false
+		}
+	}
+	if err := integrationEnv.reset(ctx); err != nil {
+		release()
+		t.Fatalf("reset shared integration env: %v", err)
 	}
 
-	if err := db.Migrate(ctx, pg.DSN, migrations.FS); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	store := integrationEnv.rawStore
+	queries := newIntegrationQueries()
+	lru := newIntegrationLRU()
 
-	pool, err := db.Connect(ctx, pg.DSN)
+	queueClient, err := queue.NewClient(integrationEnv.baseConfig.RedisURL)
 	if err != nil {
-		t.Fatalf("connect db: %v", err)
-	}
-
-	store, err := storage.NewS3(ctx, storage.S3Config{
-		Endpoint:  rs.Endpoint,
-		AccessKey: rs.AccessKey,
-		SecretKey: rs.SecretKey,
-		Region:    rs.Region,
-	})
-	if err != nil {
-		t.Fatalf("new s3 store: %v", err)
-	}
-
-	queries := dbq.New(pool)
-	lru := cache.New(64 * 1024 * 1024)
-
-	queueClient, err := queue.NewClient(rd.URL)
-	if err != nil {
+		release()
 		t.Fatalf("queue client: %v", err)
 	}
 
-	inspector, err := queue.NewInspector(rd.URL)
+	inspector, err := queue.NewInspector(integrationEnv.baseConfig.RedisURL)
 	if err != nil {
+		queueClient.Close()
+		release()
 		t.Fatalf("queue inspector: %v", err)
 	}
 
-	cfg := &config.Config{
-		Port:               3000,
-		Mode:               "server",
-		BaseURL:            "http://localhost:3000",
-		DatabaseURL:        pg.DSN,
-		RedisURL:           rd.URL,
-		SourceS3Endpoint:   rs.Endpoint,
-		SourceS3AccessKey:  rs.AccessKey,
-		SourceS3SecretKey:  rs.SecretKey,
-		SourceS3Region:     rs.Region,
-		SourceBucket:       "source",
-		MediaS3Endpoint:    rs.Endpoint,
-		MediaS3AccessKey:   rs.AccessKey,
-		MediaS3SecretKey:   rs.SecretKey,
-		MediaS3Region:      rs.Region,
-		MediaBucket:        "media",
-		HMACSecret:         "test-hmac-secret",
-		APIKey:             "test-api-key",
-		WebhookSecret:      "test-webhook-secret",
-		KeyTokenSecret:     "test-key-token-secret",
-		EncryptionKey:      "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
-		LargeFileThreshold: 5 * 1024 * 1024 * 1024,
-		CacheMaxSize:       64 * 1024 * 1024,
-	}
+	cfg := cloneIntegrationConfig()
 
 	keyWrapper, err := encryption.NewKeyWrapper(cfg.EncryptionKey)
 	if err != nil {
+		inspector.Close()
+		queueClient.Close()
+		release()
 		t.Fatalf("key wrapper: %v", err)
 	}
 
-	redisOpt, err := redis.ParseURL(rd.URL)
+	redisOpt, err := redis.ParseURL(integrationEnv.baseConfig.RedisURL)
 	if err != nil {
+		inspector.Close()
+		queueClient.Close()
+		release()
 		t.Fatalf("parse redis URL: %v", err)
 	}
 	redisClient := redis.NewClient(redisOpt)
@@ -122,7 +91,7 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		Inspector:   inspector,
 		Redis:       redisClient,
 		KeyWrapper:  keyWrapper,
-		DBPing:      pool.Ping,
+		DBPing:      integrationEnv.pool.Ping,
 		RedisPing: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
 		},
@@ -135,7 +104,10 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		queueClient.Close()
 		inspector.Close()
 		redisClient.Close()
-		pool.Close()
+		if err := integrationEnv.reset(context.Background()); err != nil {
+			t.Logf("reset shared integration env: %v", err)
+		}
+		release()
 	}
 
 	return ts, cfg, store, queries, lru, cleanup

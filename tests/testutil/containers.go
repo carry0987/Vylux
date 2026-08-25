@@ -23,10 +23,7 @@ type PostgresContainer struct {
 	DSN string
 }
 
-// StartPostgres launches a PostgreSQL container for integration testing.
-func StartPostgres(ctx context.Context, t *testing.T) *PostgresContainer {
-	t.Helper()
-
+func StartPostgresContainer(ctx context.Context) (*PostgresContainer, error) {
 	ctr, err := postgres.Run(ctx,
 		"postgres:18.1-alpine",
 		postgres.WithDatabase("media_test"),
@@ -38,7 +35,25 @@ func StartPostgres(ctx context.Context, t *testing.T) *PostgresContainer {
 		),
 	)
 	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
+		return nil, fmt.Errorf("start postgres container: %w", err)
+	}
+
+	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		_ = ctr.Terminate(ctx)
+		return nil, fmt.Errorf("get postgres DSN: %w", err)
+	}
+
+	return &PostgresContainer{PostgresContainer: ctr, DSN: dsn}, nil
+}
+
+// StartPostgres launches a PostgreSQL container for integration testing.
+func StartPostgres(ctx context.Context, t *testing.T) *PostgresContainer {
+	t.Helper()
+
+	ctr, err := StartPostgresContainer(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
@@ -47,12 +62,7 @@ func StartPostgres(ctx context.Context, t *testing.T) *PostgresContainer {
 		}
 	})
 
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("get postgres DSN: %v", err)
-	}
-
-	return &PostgresContainer{PostgresContainer: ctr, DSN: dsn}
+	return ctr
 }
 
 // RedisContainer wraps a testcontainers Redis instance.
@@ -61,10 +71,7 @@ type RedisContainer struct {
 	URL string
 }
 
-// StartRedis launches a Redis container for integration testing.
-func StartRedis(ctx context.Context, t *testing.T) *RedisContainer {
-	t.Helper()
-
+func StartRedisContainer(ctx context.Context) (*RedisContainer, error) {
 	ctr, err := redis.Run(ctx,
 		"redis:8.4-alpine",
 		testcontainers.WithWaitStrategy(
@@ -73,7 +80,28 @@ func StartRedis(ctx context.Context, t *testing.T) *RedisContainer {
 		),
 	)
 	if err != nil {
-		t.Fatalf("start redis container: %v", err)
+		return nil, fmt.Errorf("start redis container: %w", err)
+	}
+
+	ep, err := ctr.Endpoint(ctx, "")
+	if err != nil {
+		_ = ctr.Terminate(ctx)
+		return nil, fmt.Errorf("get redis endpoint: %w", err)
+	}
+
+	return &RedisContainer{
+		RedisContainer: ctr,
+		URL:            fmt.Sprintf("redis://%s", ep),
+	}, nil
+}
+
+// StartRedis launches a Redis container for integration testing.
+func StartRedis(ctx context.Context, t *testing.T) *RedisContainer {
+	t.Helper()
+
+	ctr, err := StartRedisContainer(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	t.Cleanup(func() {
@@ -82,15 +110,7 @@ func StartRedis(ctx context.Context, t *testing.T) *RedisContainer {
 		}
 	})
 
-	ep, err := ctr.Endpoint(ctx, "")
-	if err != nil {
-		t.Fatalf("get redis endpoint: %v", err)
-	}
-
-	return &RedisContainer{
-		RedisContainer: ctr,
-		URL:            fmt.Sprintf("redis://%s", ep),
-	}
+	return ctr
 }
 
 // RustFSContainer wraps a RustFS S3-compatible object storage instance.
@@ -102,10 +122,7 @@ type RustFSContainer struct {
 	Region    string
 }
 
-// StartRustFS launches a RustFS container for integration testing.
-func StartRustFS(ctx context.Context, t *testing.T) *RustFSContainer {
-	t.Helper()
-
+func StartRustFSContainer(ctx context.Context) (*RustFSContainer, error) {
 	const (
 		accessKey = "test-access-key"
 		secretKey = "test-secret-key"
@@ -126,23 +143,19 @@ func StartRustFS(ctx context.Context, t *testing.T) *RustFSContainer {
 		Started: true,
 	})
 	if err != nil {
-		t.Fatalf("start rustfs container: %v", err)
+		return nil, fmt.Errorf("start rustfs container: %w", err)
 	}
-
-	t.Cleanup(func() {
-		if err := ctr.Terminate(ctx); err != nil {
-			t.Logf("terminate rustfs: %v", err)
-		}
-	})
 
 	host, err := ctr.Host(ctx)
 	if err != nil {
-		t.Fatalf("get rustfs host: %v", err)
+		_ = ctr.Terminate(ctx)
+		return nil, fmt.Errorf("get rustfs host: %w", err)
 	}
 
 	port, err := ctr.MappedPort(ctx, "9000/tcp")
 	if err != nil {
-		t.Fatalf("get rustfs port: %v", err)
+		_ = ctr.Terminate(ctx)
+		return nil, fmt.Errorf("get rustfs port: %w", err)
 	}
 
 	return &RustFSContainer{
@@ -151,7 +164,25 @@ func StartRustFS(ctx context.Context, t *testing.T) *RustFSContainer {
 		AccessKey: accessKey,
 		SecretKey: secretKey,
 		Region:    region,
+	}, nil
+}
+
+// StartRustFS launches a RustFS container for integration testing.
+func StartRustFS(ctx context.Context, t *testing.T) *RustFSContainer {
+	t.Helper()
+
+	ctr, err := StartRustFSContainer(ctx)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	t.Cleanup(func() {
+		if err := ctr.Terminate(ctx); err != nil {
+			t.Logf("terminate rustfs: %v", err)
+		}
+	})
+
+	return ctr
 }
 
 // CreateBuckets creates the named buckets in a test S3-compatible object store.
