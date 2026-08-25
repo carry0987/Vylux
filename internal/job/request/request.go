@@ -210,6 +210,16 @@ func Canonicalize(r *Normalized) error {
 	}
 
 	switch r.Type {
+	case queue.TypeImageThumbnail:
+		parsed, err := parseImageThumbnailOptions(r.Options)
+		if err != nil {
+			return fmt.Errorf("invalid options: %w", err)
+		}
+		canonical, err := structToOptionsMap(parsed)
+		if err != nil {
+			return fmt.Errorf("canonicalize options: %w", err)
+		}
+		r.Options = canonical
 	case queue.TypeAudioTranscode:
 		parsed, err := parseAudioTranscodeOptions(r.Options)
 		if err != nil {

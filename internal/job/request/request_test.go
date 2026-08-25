@@ -205,6 +205,40 @@ func TestCanonicalizeAudioTranscodeDefaultsOutputs(t *testing.T) {
 	}
 }
 
+func TestCanonicalizeImageThumbnailPreservesOutputs(t *testing.T) {
+	req := Normalized{
+		Type:   queue.TypeImageThumbnail,
+		Hash:   "hash123",
+		Source: "uploads/image.png",
+		Options: map[string]any{
+			"outputs": []map[string]any{{
+				"variant": "thumbnail",
+				"width":   320,
+				"height":  180,
+				"format":  "webp",
+			}},
+		},
+	}
+
+	if err := Canonicalize(&req); err != nil {
+		t.Fatalf("Canonicalize: %v", err)
+	}
+	parsed, err := parseImageThumbnailOptions(req.Options)
+	if err != nil {
+		t.Fatalf("parseImageThumbnailOptions: %v", err)
+	}
+	if len(parsed.Outputs) != 1 {
+		t.Fatalf("outputs length = %d, want 1", len(parsed.Outputs))
+	}
+	want := queue.ThumbnailOutput{Variant: "thumbnail", Width: 320, Height: 180, Format: "webp"}
+	if parsed.Outputs[0] != want {
+		t.Fatalf("output = %#v, want %#v", parsed.Outputs[0], want)
+	}
+	if _, ok := req.Options["outputs"].([]any); !ok {
+		t.Fatalf("canonical outputs type = %T, want []any", req.Options["outputs"])
+	}
+}
+
 func TestCanonicalizeVideoFullDropsEmptyStages(t *testing.T) {
 	req := Normalized{
 		Type:   queue.TypeVideoFull,

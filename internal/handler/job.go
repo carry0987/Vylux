@@ -374,6 +374,14 @@ func applyNormalizedRequest(dst *JobRequest, src jobrequest.Normalized) {
 	dst.CallbackURL = src.CallbackURL
 }
 
+type imageThumbnailOptions struct {
+	Outputs []queue.ThumbnailOutput `json:"outputs,omitempty"`
+}
+
+func parseImageThumbnailOptions(opts map[string]any) (imageThumbnailOptions, error) {
+	return jsonx.StrictCodec.DecodeStrict[imageThumbnailOptions](opts)
+}
+
 func parseVideoCoverOptions(opts map[string]any) (queue.VideoCoverOptions, error) {
 	return jsonx.StrictCodec.DecodeStrict[queue.VideoCoverOptions](opts)
 }
@@ -674,14 +682,11 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 
 	switch req.Type {
 	case queue.TypeImageThumbnail:
-		payload := queue.ImageThumbnailPayload{
-			TraceCarrier: traceCarrier,
-			Hash:         req.Hash,
-			Source:       req.Source,
-			Outputs:      parseThumbnailOutputs(req.Options),
-			CallbackURL:  req.CallbackURL,
+		payload, err := buildImageThumbnailPayload(req, traceCarrier)
+		if err != nil {
+			return nil, err
 		}
-		info, err := h.queueClient.EnqueueImageThumbnail(ctx, &payload)
+		info, err := h.queueClient.EnqueueImageThumbnail(ctx, payload)
 		if err != nil {
 			return nil, err
 		}
@@ -793,45 +798,23 @@ func (h *JobHandler) enqueueTask(ctx context.Context, req JobRequest) (*taskInfo
 	}
 }
 
+func buildImageThumbnailPayload(req JobRequest, traceCarrier apptracing.TraceCarrier) (*queue.ImageThumbnailPayload, error) {
+	options, err := parseImageThumbnailOptions(req.Options)
+	if err != nil {
+		return nil, err
+	}
+
+	return &queue.ImageThumbnailPayload{
+		TraceCarrier: traceCarrier,
+		Hash:         req.Hash,
+		Source:       req.Source,
+		Outputs:      options.Outputs,
+		CallbackURL:  req.CallbackURL,
+	}, nil
+}
+
 // taskInfoCompat is a minimal subset of asynq.TaskInfo for internal use.
 type taskInfoCompat struct {
 	ID    string
 	Queue string
-}
-
-// parseThumbnailOutputs converts the "outputs" key from options into typed structs.
-func parseThumbnailOutputs(opts map[string]any) []queue.ThumbnailOutput {
-	raw, ok := opts["outputs"]
-	if !ok {
-		return nil
-	}
-
-	arr, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-
-	out := make([]queue.ThumbnailOutput, 0, len(arr))
-	for _, item := range arr {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		o := queue.ThumbnailOutput{}
-		if v, ok := m["variant"].(string); ok {
-			o.Variant = v
-		}
-		if v, ok := m["width"].(float64); ok {
-			o.Width = int(v)
-		}
-		if v, ok := m["height"].(float64); ok {
-			o.Height = int(v)
-		}
-		if v, ok := m["format"].(string); ok {
-			o.Format = v
-		}
-		out = append(out, o)
-	}
-
-	return out
 }
