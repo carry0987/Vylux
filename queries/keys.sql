@@ -1,19 +1,19 @@
--- name: UpsertEncryptionKey :exec
-INSERT INTO encryption_keys (hash, wrapped_key, wrap_nonce, kek_version, kid, scheme, key_uri)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-ON CONFLICT (hash) DO UPDATE SET
+-- name: UpsertStreamEncryptionKey :one
+INSERT INTO stream_encryption_keys (id, source_hash, asset_type, packaging_type, wrapped_key, wrap_nonce, kek_version, kid, scheme)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (source_hash, asset_type, packaging_type) DO UPDATE SET
 	wrapped_key = EXCLUDED.wrapped_key,
 	wrap_nonce = EXCLUDED.wrap_nonce,
 	kek_version = EXCLUDED.kek_version,
 	kid = EXCLUDED.kid,
-	scheme = EXCLUDED.scheme,
-	key_uri = EXCLUDED.key_uri;
+	scheme = EXCLUDED.scheme
+RETURNING *;
 
--- name: GetEncryptionKey :one
-SELECT * FROM encryption_keys WHERE hash = $1;
+-- name: GetStreamEncryptionKey :one
+SELECT * FROM stream_encryption_keys WHERE id = $1;
 
--- name: DeleteEncryptionKey :exec
-DELETE FROM encryption_keys WHERE hash = $1;
+-- name: DeleteStreamEncryptionKeysBySourceHash :exec
+DELETE FROM stream_encryption_keys WHERE source_hash = $1;
 
 -- name: UpsertImageCacheEntry :exec
 INSERT INTO image_cache_entries (hash, cache_key, storage_key)

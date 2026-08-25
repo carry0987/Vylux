@@ -42,17 +42,24 @@ CREATE TABLE IF NOT EXISTS image_cache_entries (
 
 CREATE INDEX IF NOT EXISTS idx_image_cache_entries_hash ON image_cache_entries (hash);
 
--- Encryption keys table — stores wrapped content keys for restricted video segments.
-CREATE TABLE IF NOT EXISTS encryption_keys (
-    hash        TEXT        PRIMARY KEY,     -- SHA-256 of the source video
-    wrapped_key BYTEA       NOT NULL,        -- AES-GCM wrapped 16-byte content key
-    wrap_nonce  BYTEA       NOT NULL,        -- AES-GCM nonce for wrapped_key
-    kek_version TEXT        NOT NULL DEFAULT 'v1',
-    kid         TEXT        NOT NULL DEFAULT '',
-    scheme      TEXT        NOT NULL DEFAULT 'cbcs',
-    key_uri     TEXT        NOT NULL DEFAULT '',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Stream encryption keys — stores wrapped content keys for protected streaming assets.
+CREATE TABLE IF NOT EXISTS stream_encryption_keys (
+    id             UUID        PRIMARY KEY,
+    source_hash    TEXT        NOT NULL,
+    asset_type     TEXT        NOT NULL,
+    packaging_type TEXT        NOT NULL,
+    wrapped_key    BYTEA       NOT NULL,
+    wrap_nonce     BYTEA       NOT NULL,
+    kek_version    TEXT        NOT NULL DEFAULT 'v1',
+    kid            TEXT        NOT NULL DEFAULT '',
+    scheme         TEXT        NOT NULL DEFAULT 'cbcs',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT chk_stream_encryption_keys_asset_type CHECK (asset_type IN ('audio', 'video')),
+    CONSTRAINT chk_stream_encryption_keys_packaging_type CHECK (packaging_type IN ('hls')),
+    CONSTRAINT uq_stream_encryption_keys_asset UNIQUE (source_hash, asset_type, packaging_type)
 );
+
+CREATE INDEX IF NOT EXISTS idx_stream_encryption_keys_source_hash ON stream_encryption_keys (source_hash);
 
 -- Trigger to auto-update updated_at on jobs.
 -- +goose StatementBegin
@@ -75,5 +82,5 @@ CREATE TRIGGER trg_jobs_updated_at
 DROP TRIGGER IF EXISTS trg_jobs_updated_at ON jobs;
 DROP FUNCTION IF EXISTS update_updated_at;
 DROP TABLE IF EXISTS image_cache_entries;
-DROP TABLE IF EXISTS encryption_keys;
+DROP TABLE IF EXISTS stream_encryption_keys;
 DROP TABLE IF EXISTS jobs;
