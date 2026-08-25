@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/carry0987/Vylux/compare/v2.0.0...v2.1.0) (2026-08-25)
+
+
+### Features
+
+* **audio:** add protected HLS streaming with asset-scoped keys ([#38](https://github.com/carry0987/Vylux/issues/38)) ([311a362](https://github.com/carry0987/Vylux/commit/311a36212fbdf36dd0e740ae45f6e2c7954f6d03))
+
 ## [2.0.0](https://github.com/carry0987/Vylux/compare/v1.2.1...v2.0.0) (2026-08-24)
 
 
