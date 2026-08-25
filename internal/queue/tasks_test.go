@@ -53,7 +53,7 @@ func TestTaskConstructors_JSONShape(t *testing.T) {
 				return task
 			},
 			wantPresent: []string{"hash", "source", "callback_url"},
-			wantAbsent:  []string{"hls", "mp3", "flac", "waveform", "waveform_bins", "mp3_bitrate"},
+			wantAbsent:  []string{"hls", "encrypt", "mp3", "flac", "waveform", "waveform_bins", "mp3_bitrate"},
 		},
 		{
 			name:     "audio transcode includes waveform fields when enabled",

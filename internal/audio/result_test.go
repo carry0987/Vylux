@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestProcessResultJSONOmitsMediaKind(t *testing.T) {
+func TestProcessResultJSONOmitsAssetType(t *testing.T) {
 	data, err := json.Marshal(ProcessResult{
 		Analysis: ProbeResult{
 			Container:   "flac",
@@ -20,8 +20,8 @@ func TestProcessResultJSONOmitsMediaKind(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if _, ok := decoded["media_kind"]; ok {
-		t.Fatalf("expected media_kind to be omitted, got %#v", decoded["media_kind"])
+	if _, ok := decoded["asset_type"]; ok {
+		t.Fatalf("expected asset_type to be omitted, got %#v", decoded["asset_type"])
 	}
 	if _, ok := decoded["analysis"]; !ok {
 		t.Fatalf("expected analysis field, got %#v", decoded)

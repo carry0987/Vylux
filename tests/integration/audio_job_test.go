@@ -141,8 +141,8 @@ func TestAudioJob_StructuredProcessCompletesAndPublishesStreamingAssets(t *testi
 	if !ok {
 		t.Fatalf("results type = %T, want map[string]any", status.Results)
 	}
-	if _, ok := results["media_kind"]; ok {
-		t.Fatalf("expected media_kind to be omitted, got %#v", results["media_kind"])
+	if _, ok := results["asset_type"]; ok {
+		t.Fatalf("expected asset_type to be omitted, got %#v", results["asset_type"])
 	}
 
 	stages, ok := results["stages"].(map[string]any)
@@ -221,7 +221,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForAudio(t *testing.T) {
 	defer cleanup()
 
 	body := map[string]any{
-		"media_kind": "audio",
+		"asset_type": "audio",
 		"operation":  "process",
 		"source": map[string]any{
 			"hash": "reject-audio-generic-route",
@@ -260,7 +260,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForVideo(t *testing.T) {
 	defer cleanup()
 
 	body := map[string]any{
-		"media_kind": "video",
+		"asset_type": "video",
 		"operation":  "process",
 		"source": map[string]any{
 			"hash": "reject-video-generic-route",

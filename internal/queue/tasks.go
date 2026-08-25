@@ -65,6 +65,7 @@ type VideoTranscodeOptions struct {
 // AudioTranscodeOptions describes configurable audio packaging outputs.
 type AudioTranscodeOptions struct {
 	HLS          bool   `json:"hls,omitempty"`
+	Encrypt      bool   `json:"encrypt,omitempty"`
 	MP3          bool   `json:"mp3,omitempty"`
 	FLAC         bool   `json:"flac,omitempty"`
 	Waveform     bool   `json:"waveform,omitempty"`
@@ -116,6 +117,7 @@ type AudioTranscodePayload struct {
 	Hash         string `json:"hash"`
 	Source       string `json:"source"`
 	HLS          bool   `json:"hls,omitempty"`
+	Encrypt      bool   `json:"encrypt,omitempty"`
 	MP3          bool   `json:"mp3,omitempty"`
 	FLAC         bool   `json:"flac,omitempty"`
 	Waveform     bool   `json:"waveform,omitempty"`

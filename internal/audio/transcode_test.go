@@ -133,6 +133,61 @@ func TestPackageHLSBuildsExpectedArgs(t *testing.T) {
 	}
 }
 
+func TestPackageHLSIncludesEncryptionArgs(t *testing.T) {
+	tmpDir := t.TempDir()
+	packagerArgsFile := filepath.Join(tmpDir, "packager-args.txt")
+	ffmpegScriptPath := filepath.Join(tmpDir, "ffmpeg")
+	ffmpegScript := "#!/bin/sh\nfor arg in \"$@\"; do\n  case \"$arg\" in\n    *.mp4)\n      mkdir -p \"$(dirname \"$arg\")\"\n      : > \"$arg\"\n      ;;\n  esac\ndone\n"
+	if err := os.WriteFile(ffmpegScriptPath, []byte(ffmpegScript), 0o755); err != nil {
+		t.Fatalf("write ffmpeg stub: %v", err)
+	}
+	packagerScriptPath := filepath.Join(tmpDir, "packager")
+	packagerScript := "#!/bin/sh\nprintf '%s\n' \"$@\" > \"$VYLUX_PACKAGER_ARGS\"\nmkdir -p \"$VYLUX_HLS_DIR/hls/aac_128\"\n: > \"$VYLUX_HLS_DIR/hls/master.m3u8\"\n: > \"$VYLUX_HLS_DIR/hls/aac_128/init.mp4\"\n: > \"$VYLUX_HLS_DIR/hls/aac_128/playlist.m3u8\"\n: > \"$VYLUX_HLS_DIR/hls/aac_128/seg_1.m4s\"\n"
+	if err := os.WriteFile(packagerScriptPath, []byte(packagerScript), 0o755); err != nil {
+		t.Fatalf("write packager stub: %v", err)
+	}
+
+	oldFFmpegPath := ffmpegPath
+	oldPackagerPath := packagerPath
+	oldScratchDir := config.ScratchDir
+	ffmpegPath = ffmpegScriptPath
+	packagerPath = packagerScriptPath
+	config.ScratchDir = tmpDir
+	t.Cleanup(func() {
+		ffmpegPath = oldFFmpegPath
+		packagerPath = oldPackagerPath
+		config.ScratchDir = oldScratchDir
+	})
+	t.Setenv("VYLUX_PACKAGER_ARGS", packagerArgsFile)
+	outDir := filepath.Join(tmpDir, "out")
+	t.Setenv("VYLUX_HLS_DIR", outDir)
+
+	keyID := "00112233445566778899aabbccddeeff"
+	key := []byte{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
+	_, err := PackageHLS(context.Background(), "/tmp/input.flac", outDir, &HLSOptions{
+		Track:      HLSTrack{ID: "aac_128", Role: "main", Language: "en", Codec: "aac", Channels: 2, Bitrate: "128k"},
+		SegmentSec: 4,
+		Encryption: &EncryptionConfig{
+			KeyID:     keyID,
+			Key:       key,
+			HLSKeyURI: "https://media.example.com/api/key/audio_hash123",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PackageHLS: %v", err)
+	}
+
+	data, err := os.ReadFile(packagerArgsFile)
+	if err != nil {
+		t.Fatalf("read captured args: %v", err)
+	}
+	args := strings.Split(strings.TrimSpace(string(data)), "\n")
+	assertArgEquals(t, args, "--enable_raw_key_encryption")
+	assertArgsContainPair(t, args, "--protection_scheme", "cbcs")
+	assertArgsContainPair(t, args, "--keys", "label=:key_id="+keyID+":key="+keyHex(key))
+	assertArgsContainPair(t, args, "--hls_key_uri", "https://media.example.com/api/key/audio_hash123")
+}
+
 func assertArgContains(t *testing.T, args []string, want string) {
 	t.Helper()
 	for _, arg := range args {
