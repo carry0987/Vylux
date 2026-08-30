@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,8 +28,11 @@ func NewMux() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", HTTPHandler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
+		_ = json.NewEncoder(w).Encode(struct {
+			Status string `json:"status"`
+		}{Status: "ok"})
 	})
 
 	return mux

@@ -45,9 +45,14 @@ func TestHealthEndpoints(t *testing.T) {
 			t.Errorf("GET %s: expected 200, got %d", endpoint, resp.StatusCode)
 		}
 
-		body, _ := io.ReadAll(resp.Body)
-		if string(body) != "OK" {
-			t.Errorf("GET %s: expected OK, got %q", endpoint, string(body))
+		var body struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode %s body: %v", endpoint, err)
+		}
+		if body.Status != "ok" {
+			t.Errorf("GET %s: expected status=ok, got %#v", endpoint, body)
 		}
 	}
 }
