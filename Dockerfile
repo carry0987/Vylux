@@ -4,9 +4,12 @@ FROM golang:1.27-alpine AS builder
 ARG VERSION=dev
 ARG COMMIT=unknown
 
-# Add Alpine edge community repo for libvips 8.18+
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
-    && echo "https://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories \
+# Use edge repositories consistently so libvips 8.18+ does not conflict with
+# the stable OpenSSL packages bundled in the default golang alpine image.
+RUN printf '%s\n%s\n' \
+        "https://dl-cdn.alpinelinux.org/alpine/edge/main" \
+        "https://dl-cdn.alpinelinux.org/alpine/edge/community" \
+        > /etc/apk/repositories \
     && apk add --no-cache gcc musl-dev vips-dev
 
 WORKDIR /app
