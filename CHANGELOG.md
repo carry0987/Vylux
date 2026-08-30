@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/carry0987/Vylux/compare/v2.1.0...v2.2.0) (2026-08-30)
+
+
+### Features
+
+* standardize API JSON responses ([#42](https://github.com/carry0987/Vylux/issues/42)) ([e31de0c](https://github.com/carry0987/Vylux/commit/e31de0c5c88f2ca897df9d40ef13e4c2004613f8))
+
 ## [2.1.0](https://github.com/carry0987/Vylux/compare/v2.0.0...v2.1.0) (2026-08-25)
 
 
