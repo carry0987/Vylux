@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 	"uuid"
@@ -33,6 +34,7 @@ func TestKeyHandler_NoToken(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
 	}
+	assertJSONErrorResponse(t, resp, "Unauthorized")
 }
 
 // TestKeyHandler_InvalidToken verifies 403 with an invalid token.
@@ -58,6 +60,7 @@ func TestKeyHandler_InvalidToken(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", resp.StatusCode)
 	}
+	assertJSONErrorResponse(t, resp, "Forbidden")
 }
 
 // TestKeyHandler_ExpiredToken verifies 403 with an expired token.
@@ -85,6 +88,7 @@ func TestKeyHandler_ExpiredToken(t *testing.T) {
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", resp.StatusCode)
 	}
+	assertJSONErrorResponse(t, resp, "Forbidden")
 }
 
 // TestKeyHandler_HashMismatch verifies 403 when token hash doesn't match URL hash.
@@ -110,6 +114,25 @@ func TestKeyHandler_HashMismatch(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", resp.StatusCode)
+	}
+	assertJSONErrorResponse(t, resp, "Forbidden")
+}
+
+func assertJSONErrorResponse(t *testing.T, resp *http.Response, wantMessage string) {
+	t.Helper()
+
+	if got := resp.Header.Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Fatalf("expected JSON content type, got %q", got)
+	}
+
+	var body struct {
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if body.Message != wantMessage {
+		t.Fatalf("expected message %q, got %#v", wantMessage, body)
 	}
 }
 

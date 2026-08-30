@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,12 +24,14 @@ func TestNewMux_ServesHealthzAndMetrics(t *testing.T) {
 	if healthResp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", healthResp.StatusCode)
 	}
-	healthBody, err := io.ReadAll(healthResp.Body)
-	if err != nil {
-		t.Fatalf("read /healthz body: %v", err)
+	var healthBody struct {
+		Status string `json:"status"`
 	}
-	if string(healthBody) != "OK" {
-		t.Fatalf("expected OK body, got %q", string(healthBody))
+	if err := json.NewDecoder(healthResp.Body).Decode(&healthBody); err != nil {
+		t.Fatalf("decode /healthz body: %v", err)
+	}
+	if healthBody.Status != "ok" {
+		t.Fatalf("expected status=ok, got %#v", healthBody)
 	}
 
 	metricsResp, err := http.Get(ts.URL + "/metrics")

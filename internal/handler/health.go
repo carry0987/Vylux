@@ -12,9 +12,25 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
+type healthResponse struct {
+	Status string `json:"status"`
+}
+
+type readinessCheckResponse struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+type readinessFailureResponse struct {
+	Status string                   `json:"status"`
+	Error  string                   `json:"error"`
+	Checks []readinessCheckResponse `json:"checks"`
+}
+
 // Healthz is a liveness probe — always returns 200 if the process is alive.
 func Healthz(c *echo.Context) error {
-	return c.String(http.StatusOK, "OK")
+	return c.JSON(http.StatusOK, healthResponse{Status: "ok"})
 }
 
 // ReadyzHandler checks whether all critical dependencies are ready to serve traffic.
@@ -70,17 +86,45 @@ func (h *ReadyzHandler) Handle(c *echo.Context) error {
 		}},
 	}
 
+	results := make([]readinessCheckResponse, 0, len(checks))
+	ready := true
+
 	for _, check := range checks {
 		if check.run == nil {
 			appmetrics.ObserveReadinessFailure(check.name)
-			return c.String(http.StatusServiceUnavailable, fmt.Sprintf("not ready: %s probe unavailable", check.name))
+			ready = false
+			results = append(results, readinessCheckResponse{
+				Name:   check.name,
+				Status: "failed",
+				Error:  "probe unavailable",
+			})
+			continue
 		}
 
 		if err := check.run(ctx); err != nil {
 			appmetrics.ObserveReadinessFailure(check.name)
-			return c.String(http.StatusServiceUnavailable, fmt.Sprintf("not ready: %s: %v", check.name, err))
+			ready = false
+			results = append(results, readinessCheckResponse{
+				Name:   check.name,
+				Status: "failed",
+				Error:  err.Error(),
+			})
+			continue
 		}
+
+		results = append(results, readinessCheckResponse{
+			Name:   check.name,
+			Status: "ok",
+		})
 	}
 
-	return c.String(http.StatusOK, "OK")
+	if !ready {
+		return c.JSON(http.StatusServiceUnavailable, readinessFailureResponse{
+			Status: "not_ready",
+			Error:  "readiness checks failed",
+			Checks: results,
+		})
+	}
+
+	return c.JSON(http.StatusOK, healthResponse{Status: "ok"})
 }
