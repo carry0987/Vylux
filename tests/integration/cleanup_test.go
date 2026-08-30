@@ -101,6 +101,7 @@ func TestCleanup_DeleteMedia_Unauthorized(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
 	}
+	assertJSONErrorResponse(t, resp, "missing API key")
 }
 
 func TestCleanup_DeleteMedia_RemovesTrackedImageCache(t *testing.T) {

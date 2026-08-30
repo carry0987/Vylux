@@ -61,12 +61,12 @@ func (h *KeyHandler) Handle(c *echo.Context) error {
 	}
 
 	if token == "" {
-		return c.String(http.StatusUnauthorized, "Unauthorized")
+		return echo.NewHTTPError(http.StatusUnauthorized, "Unauthorized")
 	}
 
 	payload, err := h.verifyToken(token)
 	if err != nil {
-		return c.String(http.StatusForbidden, "Forbidden")
+		return echo.NewHTTPError(http.StatusForbidden, "Forbidden")
 	}
 
 	// Fetch from DB.
@@ -77,16 +77,16 @@ func (h *KeyHandler) Handle(c *echo.Context) error {
 	}
 	row, err := h.queries.GetStreamEncryptionKey(ctx, keyID)
 	if err != nil {
-		return c.String(http.StatusNotFound, "Not Found")
+		return echo.NewHTTPError(http.StatusNotFound, "Not Found")
 	}
 	if payload.Hash != row.SourceHash {
-		return c.String(http.StatusForbidden, "Forbidden")
+		return echo.NewHTTPError(http.StatusForbidden, "Forbidden")
 	}
 
 	aesKey, err := h.wrapper.Unwrap(row.WrappedKey, row.WrapNonce, row.KekVersion)
 	if err != nil {
 		slog.Error("unwrap encryption key failed", apptracing.LogFields(ctx, "key_id", id, "hash", row.SourceHash, "error", err)...)
-		return c.String(http.StatusInternalServerError, "Internal Server Error")
+		return echo.NewHTTPError(http.StatusInternalServerError, "Internal Server Error")
 	}
 
 	c.Response().Header().Set("Cache-Control", "no-store")

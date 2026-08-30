@@ -243,13 +243,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForAudio(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, string(body))
 	}
-	bodyText, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
-	if !bytes.Contains(bodyText, []byte("Not Found")) {
-		t.Fatalf("unexpected response body: %s", string(bodyText))
-	}
+	assertJSONErrorResponse(t, resp, "Not Found")
 }
 
 func TestRetiredJobsCreateRouteReturnsNotFoundForVideo(t *testing.T) {
@@ -282,13 +276,7 @@ func TestRetiredJobsCreateRouteReturnsNotFoundForVideo(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, string(body))
 	}
-	bodyText, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read response body: %v", err)
-	}
-	if !bytes.Contains(bodyText, []byte("Not Found")) {
-		t.Fatalf("unexpected response body: %s", string(bodyText))
-	}
+	assertJSONErrorResponse(t, resp, "Not Found")
 }
 
 func waitForAudioJobStatus(t *testing.T, baseURL, apiKey, jobID string) handler.JobStatusResponse {

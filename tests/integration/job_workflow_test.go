@@ -76,6 +76,7 @@ func TestAudioJobCreate_Unauthorized(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
 	}
+	assertJSONErrorResponse(t, resp, "missing API key")
 }
 
 // TestVideoJobCreate_Success verifies that video job creation succeeds on the domain route.

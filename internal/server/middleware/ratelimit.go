@@ -41,7 +41,7 @@ func RedisRateLimit(client *redis.Client, prefix string, limit int64, window tim
 
 			if countCmd.Val() > limit {
 				c.Response().Header().Set("Retry-After", fmt.Sprintf("%d", windowSeconds))
-				return c.String(http.StatusTooManyRequests, "Too Many Requests")
+				return echo.NewHTTPError(http.StatusTooManyRequests, "Too Many Requests")
 			}
 
 			return next(c)

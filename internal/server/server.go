@@ -50,6 +50,7 @@ type Server struct {
 // New creates and configures the Echo HTTP server.
 func New(cfg *config.Config, deps *Deps) *Server {
 	e := echo.New()
+	e.HTTPErrorHandler = newHTTPErrorHandler()
 	appmetrics.ConfigureInspector(deps.Inspector)
 
 	// Built-in middleware
