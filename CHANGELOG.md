@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/carry0987/Vylux/compare/v2.2.0...v2.2.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **docker:** use edge-only Alpine repos for libvips builds ([#44](https://github.com/carry0987/Vylux/issues/44)) ([751bc66](https://github.com/carry0987/Vylux/commit/751bc66072ba7cebeecd09b8a57f396ab15b0d3c))
+
 ## [2.2.0](https://github.com/carry0987/Vylux/compare/v2.1.0...v2.2.0) (2026-08-30)
 
 
