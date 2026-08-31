@@ -7,7 +7,7 @@ description: "用最短路徑在本機啟動 Vylux、準備依賴、建立第一
 
 ## 先決條件
 
-- Go 1.26+
+- Go 1.27+
 - Docker 與 Docker Compose
 - `curl`
 - 供來源物件與輸出物件使用的 S3-compatible storage，例如 RustFS、R2 或 S3
@@ -138,6 +138,18 @@ go run ./cmd/vylux --mode=worker
 - `pkg-config` 無法解析目前的 libvips 安裝位置
 - Go build cache 還保留了舊的 cgo linker flags，例如 Homebrew 升版前的 Cellar 路徑
 
+最後這一種狀況在本機用 `brew upgrade` 更新 `vips` 或 `libvips` 後特別常見。Go toolchain 可能會繼續沿用快取中的 linker flags，指向舊的 Homebrew Cellar 目錄，即使套件本身其實已經正確安裝。
+
+典型症狀會長這樣：
+
+```text
+go build ./cmd/vylux
+...
+ld: warning: search path '/opt/homebrew/Cellar/vips/8.18.6/lib' not found
+ld: library 'vips' not found
+clang: error: linker command failed with exit code 1
+```
+
 在 macOS + Homebrew 下，最快的排查與修復流程通常是：
 
 ```bash showLineNumbers
@@ -147,6 +159,8 @@ go run ./cmd/vylux
 ```
 
 若 `brew install` 顯示套件已經存在，在 Homebrew 升版後仍建議再跑一次 `go clean -cache`。這會強制 cgo 依照目前的 `pkg-config` 輸出重新編譯，而不是沿用舊的 linker path。
+
+實務上，如果你最近剛升級過 Homebrew 套件，然後 `go build` 或 `make build` 報出找不到 `Cellar/vips/<version>/lib` 這類錯誤，請先把 `go clean -cache` 當成第一個 recovery step，再往更深層的建置問題追。
 
 ### 5. 驗證服務是否可用
 
@@ -162,12 +176,20 @@ curl -i http://localhost:3000/readyz
 curl -s http://localhost:3000/metrics | rg '^vylux_'
 ```
 
+成功時的 body 應為：
+
+```json
+{"status":"ok"}
+```
+
 ### Worker-only mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3001/healthz
 curl -s http://localhost:3001/metrics | rg '^vylux_'
 ```
+
+若 `GET /readyz` 失敗，回應會是結構化 JSON，內含摘要錯誤與各依賴檢查結果，方便你快速判斷到底是 PostgreSQL、Redis、source bucket 還是 media bucket 阻塞了啟動。
 
 ## 最小驗證順序
 
@@ -234,8 +256,9 @@ curl -s \
 
 ## 成功啟動後應可觀察到
 
-- `GET /healthz` 回 `200`
-- `GET /readyz` 可檢查 PostgreSQL、Redis 與 bucket 是否就緒
+- `GET /healthz` 回 `200`，body 為 `{"status":"ok"}`
+- `GET /readyz` 在依賴就緒時回 `200`，body 為 `{"status":"ok"}`
+- 若 `GET /readyz` 回 `503`，JSON body 會指出哪些 readiness checks 失敗
 - `GET /metrics` 回 Prometheus metrics
 - `POST /api/audio/jobs` 與 `POST /api/video/jobs` 可建立非同步處理工作
 

@@ -28,10 +28,14 @@ description: "健康檢查、readiness 與 Prometheus metrics 端點。"
 
 只要 process 活著就回：
 
-```text
-200 OK
-OK
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
 ```
+
+worker-only listener 上的 `GET :WORKER_METRICS_PORT/healthz` 也使用同樣的 JSON 格式。
 
 適合用於 liveness probe，不代表下游依賴已就緒。
 
@@ -56,16 +60,49 @@ curl -i http://localhost:3000/readyz
 
 成功：
 
-```text
-200 OK
-OK
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
 ```
 
-失敗時會回 `503 Service Unavailable`，body 會指出是哪個依賴失敗，例如：
+失敗時會回 `503 Service Unavailable`，並提供結構化 JSON 摘要與各檢查項結果。Vylux 不會在第一個失敗依賴就停止，而是會回報這次請求中實際跑過的所有 readiness checks。
 
-```text
-not ready: redis: dial tcp 127.0.0.1:6381: connect: connection refused
+```json
+{
+	"status": "not_ready",
+	"error": "readiness checks failed",
+	"checks": [
+		{"name": "postgres", "status": "ok"},
+		{
+			"name": "redis",
+			"status": "failed",
+			"error": "dial tcp 127.0.0.1:6381: connect: connection refused"
+		},
+		{
+			"name": "source bucket",
+			"status": "failed",
+			"error": "source storage is not configured"
+		},
+		{
+			"name": "media bucket",
+			"status": "failed",
+			"error": "media storage is not configured"
+		}
+	]
+}
 ```
+
+### 失敗 body 欄位
+
+| 欄位 | 代表什麼 |
+| --- | --- |
+| `status` | 整體 readiness 狀態；目前失敗時為 `not_ready` |
+| `error` | 這次 readiness 評估的摘要錯誤訊息 |
+| `checks[].name` | 依賴名稱，例如 `postgres`、`redis`、`source bucket`、`media bucket` |
+| `checks[].status` | `ok` 或 `failed` |
+| `checks[].error` | 只有該檢查失敗時才會出現 |
 
 :::warning `/readyz` 是依賴探針
 如果 `/healthz` 成功但 `/readyz` 失敗，優先把它當成基礎設施或設定問題，而不是 HTTP 路由問題。

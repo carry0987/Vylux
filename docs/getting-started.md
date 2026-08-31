@@ -7,7 +7,7 @@ description: "Start Vylux locally with the shortest possible path, prepare depen
 
 ## Prerequisites
 
-- Go 1.26+
+- Go 1.27+
 - Docker and Docker Compose
 - `curl`
 - S3-compatible storage for source and derived assets such as RustFS, R2, or S3
@@ -138,6 +138,18 @@ If startup fails with a linker error such as `library 'vips' not found`, the mos
 - `pkg-config` cannot resolve the current libvips installation
 - Go's build cache still contains stale cgo linker flags from an older Homebrew Cellar path
 
+This last case is easy to miss after a local `brew upgrade` of `vips` or `libvips`. The Go toolchain may keep reusing cached linker flags that still point at the previous Homebrew Cellar directory, even though the package is already installed correctly.
+
+Typical symptoms look like this:
+
+```text
+go build ./cmd/vylux
+...
+ld: warning: search path '/opt/homebrew/Cellar/vips/8.18.6/lib' not found
+ld: library 'vips' not found
+clang: error: linker command failed with exit code 1
+```
+
 On macOS with Homebrew, the fastest recovery path is usually:
 
 ```bash showLineNumbers
@@ -147,6 +159,8 @@ go run ./cmd/vylux
 ```
 
 If `brew install` reports that both packages are already installed, rerun `go clean -cache` anyway after a Homebrew upgrade. That forces cgo to rebuild with the current `pkg-config` output instead of reusing stale linker paths.
+
+In practice, if you recently upgraded Homebrew packages and see a build or `make build` failure mentioning a missing `Cellar/vips/<version>/lib` path, treat `go clean -cache` as the first recovery step before debugging anything deeper.
 
 ### 5. Validate service health
 
@@ -162,12 +176,20 @@ curl -i http://localhost:3000/readyz
 curl -s http://localhost:3000/metrics | rg '^vylux_'
 ```
 
+Expected success bodies:
+
+```json
+{"status":"ok"}
+```
+
 ### Worker-only mode
 
 ```bash showLineNumbers
 curl -i http://localhost:3001/healthz
 curl -s http://localhost:3001/metrics | rg '^vylux_'
 ```
+
+If `GET /readyz` fails, the response is structured JSON with a summary error plus individual dependency checks. That makes it easier to tell whether PostgreSQL, Redis, the source bucket, or the media bucket is actually blocking startup.
 
 ## Minimal validation order
 
@@ -231,8 +253,9 @@ Before release, cover at least these three smoke-test groups:
 
 ## What you should observe after startup
 
-- `GET /healthz` returns `200`
-- `GET /readyz` confirms PostgreSQL, Redis, and buckets are ready
+- `GET /healthz` returns `200` with `{"status":"ok"}`
+- `GET /readyz` returns `200` with `{"status":"ok"}` when dependencies are ready
+- if `GET /readyz` returns `503`, the JSON body identifies which readiness checks failed
 - `GET /metrics` exposes Prometheus metrics
 - `POST /api/audio/jobs` and `POST /api/video/jobs` can enqueue asynchronous media work
 

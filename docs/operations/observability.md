@@ -7,8 +7,8 @@ description: "Health checks, Prometheus metrics, OpenTelemetry tracing, and a pr
 
 ## Health endpoints
 
-- `GET /healthz`: process liveness
-- `GET /readyz`: readiness across PostgreSQL, Redis, and buckets
+- `GET /healthz`: process liveness, returns `{"status":"ok"}` when the process is alive
+- `GET /readyz`: readiness across PostgreSQL, Redis, and buckets; returns `{"status":"ok"}` on success or a structured JSON failure body with `checks[]`
 - `GET /metrics`: Prometheus metrics for the main server
 
 Any readiness failure increments `vylux_readiness_failures_total{check=...}`.

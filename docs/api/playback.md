@@ -1,3 +1,4 @@
+---
 title: Playback API
 description: "Route layout, authorization model, and curl examples for `/stream/{hash}/*` and `/api/key/{id}`."
 ---
@@ -78,6 +79,21 @@ Authorization: Bearer {token}
 
 For the exact meaning of `KEY_TOKEN_SECRET` and related playback configuration such as `BASE_URL`, see [Configuration](../operations/configuration).
 
+### Error response contract
+
+Successful key delivery still returns the raw 16-byte key as `application/octet-stream`. Failures now use a JSON envelope:
+
+```json
+{"message":"Forbidden"}
+```
+
+Common examples:
+
+- missing Bearer token: `{"message":"Unauthorized"}`
+- invalid signature, expired token, or hash mismatch: `{"message":"Forbidden"}`
+- unknown key id: `{"message":"Not Found"}`
+- rate-limited request: `{"message":"Too Many Requests"}`
+
 ### Token format
 
 The Bearer token contains two base64url fragments:
@@ -132,10 +148,11 @@ On success, the last command should print `16` because the endpoint returns the 
 | Status | Meaning |
 | --- | --- |
 | `200` | token verified and the content key was returned as `application/octet-stream` |
-| `401` | missing `Authorization: Bearer ...` header |
-| `403` | invalid signature, expired token, or hash mismatch |
-| `404` | no stream-key record exists for the key id |
-| `500` | unwrap failure or other internal error |
+| `401` | missing `Authorization: Bearer ...` header; response body uses the JSON error envelope |
+| `403` | invalid signature, expired token, or hash mismatch; response body uses the JSON error envelope |
+| `404` | no stream-key record exists for the key id; response body uses the JSON error envelope |
+| `429` | Redis-backed rate limit exceeded; response body uses the JSON error envelope and includes `Retry-After` |
+| `500` | unwrap failure or other internal error; response body uses the JSON error envelope |
 
 This endpoint also uses a Redis-backed rate limit. The current default is 120 requests per minute, keyed by Bearer token or remote IP.
 

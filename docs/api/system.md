@@ -28,10 +28,14 @@ For the defaults and validation rules of `WORKER_METRICS_PORT`, see [Configurati
 
 As long as the process is alive, this endpoint returns:
 
-```text
-200 OK
-OK
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
 ```
+
+The worker-only listener at `GET :WORKER_METRICS_PORT/healthz` uses the same JSON shape.
 
 Use it for liveness, not dependency readiness.
 
@@ -56,16 +60,49 @@ curl -i http://localhost:3000/readyz
 
 Success:
 
-```text
-200 OK
-OK
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
 ```
 
-Failures return `503 Service Unavailable` with a short plain-text explanation such as:
+Failures return `503 Service Unavailable` with a structured JSON summary plus per-check results. Vylux does not stop at the first failed dependency; it reports every readiness check it evaluated during the request.
 
-```text
-not ready: redis: dial tcp 127.0.0.1:6381: connect: connection refused
+```json
+{
+	"status": "not_ready",
+	"error": "readiness checks failed",
+	"checks": [
+		{"name": "postgres", "status": "ok"},
+		{
+			"name": "redis",
+			"status": "failed",
+			"error": "dial tcp 127.0.0.1:6381: connect: connection refused"
+		},
+		{
+			"name": "source bucket",
+			"status": "failed",
+			"error": "source storage is not configured"
+		},
+		{
+			"name": "media bucket",
+			"status": "failed",
+			"error": "media storage is not configured"
+		}
+	]
+}
 ```
+
+### Failure body fields
+
+| Field | Meaning |
+| --- | --- |
+| `status` | overall readiness state; currently `not_ready` on failure |
+| `error` | short summary of the failed readiness evaluation |
+| `checks[].name` | the dependency name such as `postgres`, `redis`, `source bucket`, or `media bucket` |
+| `checks[].status` | `ok` or `failed` |
+| `checks[].error` | present only when that dependency failed |
 
 :::warning `/readyz` is a dependency probe
 If `/readyz` fails while `/healthz` succeeds, treat it as an infrastructure or configuration problem first, not as an HTTP routing problem.

@@ -33,6 +33,26 @@ X-API-Key: {internal_api_key}
 - 建立路由與 lifecycle 路由都需要 `X-API-Key`
 - create 與 retry 請求目前套用 Redis-based fixed-window rate limit：每個 API key 每分鐘 30 次
 
+## 通用 HTTP 錯誤格式
+
+`/api/*` 上的認證、授權、rate limit 與路由層 HTTP 錯誤，現在都統一回 JSON，而不是純文字：
+
+```json
+{"message":"Unauthorized"}
+```
+
+若 fixed-window limiter 拒絕請求，Vylux 會回 `429 Too Many Requests`，並透過 `Retry-After` 告知剩餘視窗秒數。
+
+典型 rate-limit 回應如下：
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 60
+
+{"message":"Too Many Requests"}
+```
+
 ## `POST /api/audio/jobs`
 
 建立新的非同步音訊工作。若相同請求已存在且尚未失敗，系統會走 idempotency 路徑，直接回傳既有工作或既有結果。
@@ -227,11 +247,13 @@ curl -s \
 | --- | --- |
 | `202 Accepted` | 新 job 已建立並入列 |
 | `200 OK` | 命中 idempotency；回傳既有 job 或既有結果 |
+| `401 Unauthorized` | 缺少或無效的 `X-API-Key` |
 | `400 Bad Request` | JSON 錯誤、schema 不合法、deliverable 組合不支援，或來源 object 不存在 |
 | `413 Request Entity Too Large` | 來源超過 `MAX_FILE_SIZE` |
+| `429 Too Many Requests` | 超過 Redis-based fixed-window rate limit；response body 使用 JSON 錯誤格式 |
 | `500 Internal Server Error` | enqueue 或資料庫流程失敗 |
 
-已退役的 generic `POST /api/jobs` route 不屬於這份 create contract，對外應視為不可用。
+已退役的 generic `POST /api/jobs` route 不屬於這份 create contract，對外應視為不可用。若舊 client 仍呼叫它，預期會得到 JSON `404` 回應 `{"message":"Not Found"}`，而不是純文字 body。
 
 新 job 通常回傳：
 

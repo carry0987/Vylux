@@ -1,3 +1,4 @@
+---
 title: Encrypted Streaming
 description: "The practical raw-key CBCS lifecycle for protected HLS, including stream-key storage, `/api/key/{id}` validation, and player integration."
 ---

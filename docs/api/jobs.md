@@ -33,6 +33,26 @@ For the exact meaning of `API_KEY`, `SOURCE_S3_*`, `MEDIA_S3_*`, bucket names, a
 - create routes and lifecycle routes require `X-API-Key`
 - create and retry requests currently use a Redis-backed fixed-window rate limit of 30 requests per minute per API key
 
+## Common HTTP error envelope
+
+Authentication, authorization, rate-limit, and route-level HTTP errors on `/api/*` are returned as JSON instead of plain text:
+
+```json
+{"message":"Unauthorized"}
+```
+
+When the fixed-window limiter rejects a request, Vylux returns `429 Too Many Requests` and also sets `Retry-After` to the remaining window in seconds.
+
+Typical rate-limit response:
+
+```http
+HTTP/1.1 429 Too Many Requests
+Content-Type: application/json
+Retry-After: 60
+
+{"message":"Too Many Requests"}
+```
+
 ## `POST /api/audio/jobs`
 
 Create a new asynchronous audio job. If an equivalent request already exists and is still active, Vylux returns the existing job or completed result instead of enqueuing a duplicate.
@@ -227,11 +247,13 @@ curl -s \
 | --- | --- |
 | `202 Accepted` | a new job was created and queued |
 | `200 OK` | idempotency hit; returns the existing job or existing result |
+| `401 Unauthorized` | missing or invalid `X-API-Key` |
 | `400 Bad Request` | invalid JSON, unsupported schema, unsupported deliverable combination, or missing source object |
 | `413 Request Entity Too Large` | source exceeds `MAX_FILE_SIZE` |
+| `429 Too Many Requests` | Redis-backed fixed-window limit exceeded; response body uses the JSON error envelope |
 | `500 Internal Server Error` | enqueue or persistence failure |
 
-The retired generic `POST /api/jobs` route is not part of this contract and should be treated as unavailable.
+The retired generic `POST /api/jobs` route is not part of this contract and should be treated as unavailable. If an older client still calls it, expect a JSON `404` response with `{"message":"Not Found"}` rather than a plain-text body.
 
 A new job usually returns:
 

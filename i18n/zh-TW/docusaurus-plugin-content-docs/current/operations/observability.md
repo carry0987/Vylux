@@ -7,8 +7,8 @@ description: "健康檢查、Prometheus metrics、OpenTelemetry tracing 與本�
 
 ## 端點（HTTP）
 
-- `GET /healthz`: liveness probe
-- `GET /readyz`: readiness probe
+- `GET /healthz`: liveness probe；process 活著時回 `{"status":"ok"}`
+- `GET /readyz`: PostgreSQL、Redis 與 buckets 的 readiness probe；成功回 `{"status":"ok"}`，失敗回帶有 `checks[]` 的結構化 JSON
 - `GET /metrics`: Prometheus metrics
 
 `/readyz` 目前會檢查：

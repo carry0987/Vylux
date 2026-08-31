@@ -79,6 +79,21 @@ Authorization: Bearer {token}
 
 `KEY_TOKEN_SECRET` 與 `BASE_URL` 等播放相關設定的完整說明，請見 [設定](../operations/configuration)。
 
+### 錯誤回應格式
+
+成功的 key delivery 仍會回傳原始 16-byte 金鑰，`Content-Type` 為 `application/octet-stream`。失敗情況則改用 JSON 錯誤格式：
+
+```json
+{"message":"Forbidden"}
+```
+
+常見例子：
+
+- 缺少 Bearer token：`{"message":"Unauthorized"}`
+- 簽名錯誤、token 過期或 `hash` 不匹配：`{"message":"Forbidden"}`
+- 找不到 key id：`{"message":"Not Found"}`
+- 觸發 rate limit：`{"message":"Too Many Requests"}`
+
 ### Token 格式
 
 Bearer token 由兩段 base64url 字串組成：
@@ -133,10 +148,11 @@ curl -s \
 | 狀態碼 | 代表情況 |
 | --- | --- |
 | `200` | token 驗證成功，回傳 `application/octet-stream` 金鑰內容 |
-| `401` | 缺少 `Authorization: Bearer ...` |
-| `403` | token 簽名錯誤、已過期或 `hash` 不匹配 |
-| `404` | 該 key id 沒有對應的 stream key record |
-| `500` | unwrap 失敗或其他內部錯誤 |
+| `401` | 缺少 `Authorization: Bearer ...`；response body 使用 JSON 錯誤格式 |
+| `403` | token 簽名錯誤、已過期或 `hash` 不匹配；response body 使用 JSON 錯誤格式 |
+| `404` | 該 key id 沒有對應的 stream key record；response body 使用 JSON 錯誤格式 |
+| `429` | 超過 Redis-based rate limit；response body 使用 JSON 錯誤格式，且包含 `Retry-After` |
+| `500` | unwrap 失敗或其他內部錯誤；response body 使用 JSON 錯誤格式 |
 
 這個端點也有 Redis-based rate limit，預設每分鐘 120 次，依 Bearer token 或來源 IP 計算。
 

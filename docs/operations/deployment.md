@@ -33,6 +33,20 @@ The release workflow in `.github/workflows/docker.yml` builds and publishes the 
 
 Unless you are testing an unreleased Dockerfile change, standard Docker Compose and Kubernetes deployments can pull this image directly without building locally.
 
+## Building the repository Dockerfile locally
+
+If you do need to build the repository Dockerfile yourself, keep the current libvips packaging rule intact.
+
+:::warning Do not mix Alpine stable and edge repositories in the builder
+The builder stage intentionally overwrites `/etc/apk/repositories` with only `edge/main` and `edge/community` before `apk add vips-dev`. Appending edge repositories onto the default `golang:1.27-alpine` stable list can produce OpenSSL dependency conflicts once libvips 8.18+ is involved.
+:::
+
+Operationally, that means:
+
+- do not reintroduce the default stable repositories ahead of `vips-dev`
+- if you fork the Dockerfile, keep the edge-only builder repository setup
+- current CI validation tracks libvips `8.18.6`
+
 ## Local development
 
 The most common local shape is:

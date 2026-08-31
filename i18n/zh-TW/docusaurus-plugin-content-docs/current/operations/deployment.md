@@ -33,6 +33,20 @@ CMD ["--mode=all"]
 
 除非你是在驗證尚未發布的 Dockerfile 變更，否則標準的 Docker Compose 與 Kubernetes 部署都可以直接 pull 這個映像，不需要本機重新 build。
 
+## 本機建置 repository Dockerfile 時的注意事項
+
+如果你確實需要自行 build repository 內的 Dockerfile，請保留目前 libvips 套件來源的處理方式。
+
+:::warning 不要在 builder stage 混用 Alpine stable 與 edge repositories
+builder stage 會刻意先覆寫 `/etc/apk/repositories`，只保留 `edge/main` 與 `edge/community`，之後才 `apk add vips-dev`。若把 edge repositories 只是附加到預設 `golang:1.27-alpine` 的 stable 清單後面，libvips 8.18+ 很容易跟 OpenSSL 相依版本發生衝突。
+:::
+
+實務上代表：
+
+- 不要把預設 stable repositories 再加回 `vips-dev` 安裝流程前面
+- 若你 fork 了 Dockerfile，請保留 edge-only 的 builder repository 設定
+- 目前 CI 驗證追蹤的 libvips 版本是 `8.18.6`
+
 ## 本機開發
 
 最常見的本機組合是：
