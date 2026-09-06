@@ -18,9 +18,9 @@ var timeRe = regexp.MustCompile(`time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})`)
 
 // ParseProgress reads FFmpeg stderr and calls fn with the progress ratio.
 // totalDuration is the expected input duration in seconds.
-func ParseProgress(r io.Reader, totalDuration float64, fn ProgressFunc) {
+func ParseProgress(r io.Reader, totalDuration float64, fn ProgressFunc) error {
 	if totalDuration <= 0 || fn == nil {
-		return
+		return nil
 	}
 
 	scanner := bufio.NewScanner(r)
@@ -51,6 +51,12 @@ func ParseProgress(r io.Reader, totalDuration float64, fn ProgressFunc) {
 
 		fn(pct)
 	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("scan ffmpeg progress: %w", err)
+	}
+
+	return nil
 }
 
 // FormatDuration returns "HH:MM:SS" from seconds.

@@ -113,7 +113,7 @@ func TestPackageHLSBuildsExpectedArgs(t *testing.T) {
 	}
 	args := strings.Split(strings.TrimSpace(string(data)), "\n")
 	assertArgContains(t, args, "stream=audio")
-	assertArgContains(t, args, "playlist_name=hls/aac_128/playlist.m3u8")
+	assertArgContains(t, args, "playlist_name="+filepath.Join(outDir, filepath.FromSlash("hls/aac_128/playlist.m3u8")))
 	assertArgsContainPair(t, args, "--hls_playlist_type", "VOD")
 	assertArgsContainPair(t, args, "--segment_duration", "4")
 	assertArgsContainPair(t, args, "--fragment_duration", "4")
@@ -186,6 +186,17 @@ func TestPackageHLSIncludesEncryptionArgs(t *testing.T) {
 	assertArgsContainPair(t, args, "--protection_scheme", "cbcs")
 	assertArgsContainPair(t, args, "--keys", "label=:key_id="+keyID+":key="+keyHex(key))
 	assertArgsContainPair(t, args, "--hls_key_uri", "https://media.example.com/api/key/audio_hash123")
+}
+
+func TestBuildAudioDescriptorUsesAbsolutePlaylistPath(t *testing.T) {
+	outDir := t.TempDir()
+	track := &HLSTrack{ID: "aac_128", Role: "main", Language: "en", Codec: "aac", Channels: 2, Bitrate: "128k"}
+
+	descriptor := buildAudioDescriptor("/tmp/input.mp4", outDir, track)
+
+	assertArgContains(t, []string{descriptor}, "playlist_name="+filepath.Join(outDir, filepath.FromSlash(audioPlaylistPath(track))))
+	assertArgContains(t, []string{descriptor}, "init_segment="+filepath.Join(outDir, filepath.FromSlash(audioInitPath(track))))
+	assertArgContains(t, []string{descriptor}, "segment_template="+filepath.Join(outDir, filepath.FromSlash(audioSegmentPattern(track))))
 }
 
 func assertArgContains(t *testing.T, args []string, want string) {

@@ -93,8 +93,9 @@ func TestPackageHLSBuildsSplitTrackEncryptedArgs(t *testing.T) {
 	}
 	keyID := "00112233445566778899aabbccddeeff"
 	key := []byte{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}
+	outDir := t.TempDir()
 
-	if err := packageHLS(context.Background(), t.TempDir(), "/tmp/audio.mp4", map[string]string{
+	if err := packageHLS(context.Background(), outDir, "/tmp/audio.mp4", map[string]string{
 		variant.Label: "/tmp/r720_h264.mp4",
 	}, &TranscodeOptions{
 		Variants:   []TranscodeVariant{variant},
@@ -116,10 +117,10 @@ func TestPackageHLSBuildsSplitTrackEncryptedArgs(t *testing.T) {
 	args := strings.Split(strings.TrimSpace(string(data)), "\n")
 
 	assertArgContains(t, args, "stream=audio")
-	assertArgContains(t, args, "playlist_name=audio/und_aac_2ch/playlist.m3u8")
+	assertArgContains(t, args, "playlist_name="+filepath.Join(outDir, filepath.FromSlash("audio/und_aac_2ch/playlist.m3u8")))
 	assertArgContains(t, args, "segment_template=")
 	assertArgContains(t, args, "stream=video")
-	assertArgContains(t, args, "playlist_name=video/r720_h264/playlist.m3u8")
+	assertArgContains(t, args, "playlist_name="+filepath.Join(outDir, filepath.FromSlash("video/r720_h264/playlist.m3u8")))
 	assertArgContains(t, args, "bw=2500000")
 	assertArgsContainPair(t, args, "--hls_playlist_type", "VOD")
 	assertArgsContainPair(t, args, "--segment_duration", "4")
@@ -169,6 +170,20 @@ func TestPackageHLSIncludesExplicitLanguage(t *testing.T) {
 
 	assertArgContains(t, args, "lang=en")
 	assertArgsContainPair(t, args, "--default_language", "en")
+}
+
+func TestBuildDescriptorsUseAbsolutePlaylistPaths(t *testing.T) {
+	outDir := t.TempDir()
+	track := DefaultAudioTrack()
+	variant := TranscodeVariant{Label: "r720_h264", Codec: CodecH264, Width: 1280, Height: 720, CRF: 23}
+
+	audioDescriptor := buildAudioDescriptor("/tmp/audio.mp4", outDir, &track)
+	videoDescriptor := buildVideoDescriptor("/tmp/video.mp4", outDir, variant)
+
+	assertArgContains(t, []string{audioDescriptor}, "playlist_name="+filepath.Join(outDir, filepath.FromSlash(audioPlaylistPath(&track))))
+	assertArgContains(t, []string{videoDescriptor}, "playlist_name="+filepath.Join(outDir, filepath.FromSlash(videoPlaylistPath(variant))))
+	assertArgContains(t, []string{audioDescriptor}, "init_segment="+filepath.Join(outDir, filepath.FromSlash(audioInitPath(&track))))
+	assertArgContains(t, []string{videoDescriptor}, "init_segment="+filepath.Join(outDir, filepath.FromSlash(videoInitPath(variant))))
 }
 
 func TestPackageHLSRejectsIncompleteEncryptionConfig(t *testing.T) {
