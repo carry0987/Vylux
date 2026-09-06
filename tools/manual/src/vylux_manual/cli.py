@@ -69,8 +69,8 @@ def build_parser() -> argparse.ArgumentParser:
     delete_media = sub.add_parser("delete-media", help="Delete all derived media for a content hash")
     delete_media.add_argument("hash")
 
-    health = sub.add_parser("health", help="Call /healthz")
-    ready = sub.add_parser("ready", help="Call /readyz")
+    sub.add_parser("health", help="Call /healthz")
+    sub.add_parser("ready", help="Call /readyz")
 
     img = sub.add_parser("image-url", help="Build a signed /img URL")
     img.add_argument("source_key")

@@ -27,6 +27,7 @@
 *.pyo
 __pycache__/
 tools/**/.venv/
+tools/**/*.egg-info/
 
 # Logs
 npm-debug.log*

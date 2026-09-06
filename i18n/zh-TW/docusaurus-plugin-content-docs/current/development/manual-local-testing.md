@@ -10,7 +10,7 @@ description: "說明 gh-pages 分支上的 Python helpers，如何用來做 Rust
 工具放在：
 
 ```text
-tools/vylux-manual/
+tools/manual/
 ```
 
 這套工具的定位是本機與可信任工程環境用的輔助工具，不是 production SDK。
@@ -31,10 +31,16 @@ tools/vylux-manual/
 - 若要操作 RustFS object，需安裝 `boto3`
 - 準備好可用的 `.env`，必要時再加 `.env.local`
 
+先從 repo root 以 editable mode 安裝這個工具：
+
+```bash showLineNumbers
+python3 -m pip install -e tools/manual
+```
+
 安裝 RustFS 相關依賴：
 
 ```bash showLineNumbers
-python3 -m pip install boto3
+python3 -m pip install -e 'tools/manual[rustfs]'
 ```
 
 ## 環境變數載入順序
@@ -50,13 +56,29 @@ python3 -m pip install boto3
 - `.env` 通常放 container-to-container 位址，例如 `postgres`、`redis`、`otel-collector`
 - `.env.local` 通常放 host-to-container 覆蓋值，例如 `localhost:5434`、`localhost:6381`、`localhost:9002`
 
-## 入口
+## 快速開始
 
 在 `gh-pages` 分支根目錄執行：
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py --help
+python3 -m pip install -e tools/manual
+vylux-manual --help
 ```
+
+如果你偏好 module 形式，也可以使用：
+
+```bash showLineNumbers
+python3 -m vylux_manual --help
+```
+
+建議使用方式如下：
+
+1. 先在 repo root 準備好 Vylux 所需的 `.env` 或 `.env.local`。
+2. 用 editable mode 安裝一次工具。
+3. 執行 `vylux-manual --help` 查看所有可用指令。
+4. 依你想驗證的流程，逐一執行單一指令，例如上傳檔案、送出工作、查詢狀態，或產生簽名 URL。
+
+本頁以 `vylux-manual` 這個安裝後產生的命令作為主要入口。
 
 ## 支援的指令
 
@@ -80,33 +102,44 @@ python3 tools/vylux-manual/run.py --help
 ### 上傳來源檔案
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py upload source uploads/demo.flac /path/to/demo.flac
-python3 tools/vylux-manual/run.py upload source uploads/demo.mp4 /path/to/demo.mp4
+vylux-manual upload source uploads/demo.flac /path/to/demo.flac
+vylux-manual upload source uploads/demo.mp4 /path/to/demo.mp4
 ```
 
 ### 建立加密 audio HLS 工作
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py create-audio a0b1c2d3 uploads/demo.flac --encrypt --waveform
+vylux-manual create-audio a0b1c2d3 uploads/demo.flac --encrypt --waveform
 ```
 
 ### 建立加密 video transcode 工作
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py create-video-transcode deadbeef uploads/demo.mp4 --encrypt
+vylux-manual create-video-transcode deadbeef uploads/demo.mp4 --encrypt
 ```
 
 ### 查詢 job 狀態
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py job-status <job-id>
+vylux-manual job-status <job-id>
 ```
 
 ### 依 hash 刪除衍生媒體
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py delete-media deadbeef
+vylux-manual delete-media deadbeef
 ```
+
+## 建議流程
+
+多數手動測試可以依照這個順序進行：
+
+1. 把來源檔案上傳到 `source` bucket。
+2. 送出你要觀察的媒體處理工作。
+3. 用 `job-status` 持續查詢直到處理完成。
+4. 處理完成後，再產生播放或交付所需的簽名 URL。
+
+這樣能讓這套工具維持在一次性驗證與理解流程的用途，而不是演變成自動化系統。
 
 ## 簽名與播放輔助
 
@@ -115,25 +148,25 @@ python3 tools/vylux-manual/run.py delete-media deadbeef
 ### 已簽名圖片 URL
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py image-url uploads/sample.png webp --options w320_h180
+vylux-manual image-url uploads/sample.png webp --options w320_h180
 ```
 
 ### 已簽名原檔 URL
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py original-url uploads/sample.png
+vylux-manual original-url uploads/sample.png
 ```
 
 ### 已簽名縮圖 URL
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py thumb-url videos/mo/movie-2026-04-01/cover.jpg
+vylux-manual thumb-url videos/mo/movie-2026-04-01/cover.jpg
 ```
 
 ### Key endpoint URL 與 Bearer token
 
 ```bash showLineNumbers
-python3 tools/vylux-manual/run.py key-url <key-id> <content-hash> --ttl 3600
+vylux-manual key-url <key-id> <content-hash> --ttl 3600
 ```
 
 ## 安全提醒
