@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.2](https://github.com/carry0987/Vylux/compare/v2.2.1...v2.2.2) (2026-09-06)
+
+
+### Bug Fixes
+
+* **hls:** use absolute packager playlist output paths ([#49](https://github.com/carry0987/Vylux/issues/49)) ([380780e](https://github.com/carry0987/Vylux/commit/380780e66020f8c3bd8301448652a8fda261a955))
+
 ## [2.2.1](https://github.com/carry0987/Vylux/compare/v2.2.0...v2.2.1) (2026-08-30)
 
 
