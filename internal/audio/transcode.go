@@ -235,7 +235,7 @@ func buildAudioDescriptor(input, outDir string, track *HLSTrack) string {
 		"stream=audio",
 		"init_segment=" + filepath.Join(outDir, filepath.FromSlash(audioInitPath(track))),
 		"segment_template=" + filepath.Join(outDir, filepath.FromSlash(audioSegmentPattern(track))),
-		"playlist_name=" + audioPlaylistPath(track),
+		"playlist_name=" + filepath.Join(outDir, filepath.FromSlash(audioPlaylistPath(track))),
 		"hls_group_id=audio",
 		"hls_name=" + audioName(track),
 	}

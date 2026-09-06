@@ -314,7 +314,7 @@ func buildAudioDescriptor(input, outDir string, track *AudioTrack) string {
 		"stream=audio",
 		"init_segment=" + filepath.Join(outDir, filepath.FromSlash(audioInitPath(track))),
 		"segment_template=" + filepath.Join(outDir, filepath.FromSlash(audioSegmentPattern(track))),
-		"playlist_name=" + audioPlaylistPath(track),
+		"playlist_name=" + filepath.Join(outDir, filepath.FromSlash(audioPlaylistPath(track))),
 		"hls_group_id=audio",
 		"hls_name=" + audioName(track),
 	}
@@ -336,7 +336,7 @@ func buildVideoDescriptor(input, outDir string, variant TranscodeVariant) string
 		"stream=video",
 		"init_segment=" + filepath.Join(outDir, filepath.FromSlash(videoInitPath(variant))),
 		"segment_template=" + filepath.Join(outDir, filepath.FromSlash(videoSegmentPattern(variant))),
-		"playlist_name=" + videoPlaylistPath(variant),
+		"playlist_name=" + filepath.Join(outDir, filepath.FromSlash(videoPlaylistPath(variant))),
 		"bw=" + formatBandwidth(variant),
 	}
 
