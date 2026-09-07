@@ -1,6 +1,6 @@
 ---
 title: Manual Local Testing Toolkit
-description: "Python testing toolkit for manual local Vylux workflows: job creation, playback signing, cleanup, and object uploads to any S3-compatible storage."
+description: "How to use the Vylux local manual testing toolkit to quickly understand and manually test Vylux workflows, including object uploads, job creation, playback signing, and cleanup."
 ---
 
 # Manual Local Testing Toolkit

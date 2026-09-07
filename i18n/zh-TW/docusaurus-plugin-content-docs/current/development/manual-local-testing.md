@@ -1,6 +1,6 @@
 ---
 title: 本機手動測試工具
-description: "本機手動測試用 Python 工具套件：支援任意 S3-compatible storage 的上傳、job 建立、播放簽名與清理流程。"
+description: "說明如何使用 Vylux 的本機手動測試工具，快速了解並手動測試 Vylux 流程，包含物件上傳、job 建立、播放簽名與清理。"
 ---
 
 # 本機手動測試工具
