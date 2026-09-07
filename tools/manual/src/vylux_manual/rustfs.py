@@ -11,7 +11,7 @@ class RustFSClient:
         try:
             import boto3  # type: ignore
         except ImportError as exc:  # pragma: no cover
-            raise RuntimeError("boto3 is required for RustFS operations. Install it with: python3 -m pip install boto3") from exc
+            raise RuntimeError("boto3 is required for RustFS operations. Install it with: python -m pip install boto3") from exc
 
         self._boto3 = boto3
         self.settings = settings

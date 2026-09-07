@@ -24,13 +24,13 @@ tools/manual/
 先從 repo root 以 editable mode 安裝這個工具：
 
 ```bash showLineNumbers
-python3 -m pip install -e tools/manual
+python -m pip install -e tools/manual
 ```
 
 安裝 RustFS 相關依賴：
 
 ```bash showLineNumbers
-python3 -m pip install -e 'tools/manual[rustfs]'
+python -m pip install -e 'tools/manual[rustfs]'
 ```
 
 ## 環境變數載入順序
@@ -51,14 +51,14 @@ python3 -m pip install -e 'tools/manual[rustfs]'
 在 `gh-pages` 分支根目錄執行：
 
 ```bash showLineNumbers
-python3 -m pip install -e tools/manual
+python -m pip install -e tools/manual
 vylux-manual --help
 ```
 
 如果你偏好 module 形式，也可以使用：
 
 ```bash showLineNumbers
-python3 -m vylux_manual --help
+python -m vylux_manual --help
 ```
 
 建議使用方式如下：

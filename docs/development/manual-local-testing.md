@@ -24,13 +24,13 @@ It is intended for local and trusted engineering workflows, not as a production 
 Install the toolkit in editable mode from the repo root:
 
 ```bash showLineNumbers
-python3 -m pip install -e tools/manual
+python -m pip install -e tools/manual
 ```
 
 Install the optional RustFS dependency with:
 
 ```bash showLineNumbers
-python3 -m pip install -e 'tools/manual[rustfs]'
+python -m pip install -e 'tools/manual[rustfs]'
 ```
 
 ## Environment loading order
@@ -51,14 +51,14 @@ This mirrors the common Vylux local-development pattern:
 From the `gh-pages` branch root:
 
 ```bash showLineNumbers
-python3 -m pip install -e tools/manual
+python -m pip install -e tools/manual
 vylux-manual --help
 ```
 
 If you prefer the module form, use:
 
 ```bash showLineNumbers
-python3 -m vylux_manual --help
+python -m vylux_manual --help
 ```
 
 Use the toolkit like this:

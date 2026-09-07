@@ -14,13 +14,13 @@ The toolkit is intentionally kept on the `gh-pages` branch so the main applicati
 Install the toolkit in editable mode from the repo root:
 
 ```bash
-python3 -m pip install -e tools/manual
+python -m pip install -e tools/manual
 ```
 
 Install the optional dependency with:
 
 ```bash
-python3 -m pip install -e 'tools/manual[rustfs]'
+python -m pip install -e 'tools/manual[rustfs]'
 ```
 
 Check that the CLI is available:
@@ -32,7 +32,7 @@ vylux-manual --help
 If you prefer the module form, you can run:
 
 ```bash
-python3 -m vylux_manual --help
+python -m vylux_manual --help
 ```
 
 ## Environment loading
@@ -48,7 +48,7 @@ This matches the local development workflow documented in the site.
 ## How to use it
 
 1. Prepare `.env` or `.env.local` in the repo root.
-2. Install the toolkit with `python3 -m pip install -e tools/manual`.
+2. Install the toolkit with `python -m pip install -e tools/manual`.
 3. Run `vylux-manual --help` to see all supported commands.
 4. Use one command at a time for the exact workflow you want to test.
 
