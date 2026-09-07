@@ -24,14 +24,18 @@ It is intended for local and trusted engineering workflows, not as a production 
 Install the toolkit in editable mode from the repo root:
 
 ```bash showLineNumbers
-python -m pip install -e tools/manual
+pip install -e tools/manual
 ```
 
 Install the optional RustFS dependency with:
 
 ```bash showLineNumbers
-python -m pip install -e 'tools/manual[rustfs]'
+pip install -e 'tools/manual[rustfs]'
 ```
+
+:::tip If `pip` and `python` do not point to the same environment
+In most conda and virtualenv workflows, `pip` and `python` belong to the same active environment. If yours does not, replace `pip ...` with `python -m pip ...`.
+:::
 
 ## Environment loading order
 
@@ -51,7 +55,7 @@ This mirrors the common Vylux local-development pattern:
 From the `gh-pages` branch root:
 
 ```bash showLineNumbers
-python -m pip install -e tools/manual
+pip install -e tools/manual
 vylux-manual --help
 ```
 
@@ -69,6 +73,8 @@ Use the toolkit like this:
 4. Execute one command for the exact slice you want to test: upload, submit a job, inspect job status, or build a signed URL.
 
 The generated `vylux-manual` command is the primary entry point shown in this guide.
+
+After installation, any shell using the same Python environment can run `vylux-manual`. The repo root matters for the install command and for the `.env` files the toolkit loads.
 
 ## Supported commands
 
@@ -130,6 +136,36 @@ For most manual tests, use this sequence:
 4. Generate signed playback or delivery URLs for the resulting assets.
 
 This keeps the toolkit focused on one-off validation and learning flows rather than automation.
+
+## After editing the toolkit
+
+If you change Python code under `tools/manual/src/vylux_manual`, you usually do not need to rebuild or reinstall anything. Because the package is installed in editable mode, `vylux-manual` already points at your working tree.
+
+In most cases, the workflow is simply:
+
+```bash showLineNumbers
+vylux-manual --help
+```
+
+Run the command you want to test again after saving your changes.
+
+Re-run the install command only if you change packaging metadata in `pyproject.toml`, add dependencies, or change console script definitions.
+
+## Uninstalling the toolkit
+
+Remove the toolkit from the current Python environment with:
+
+```bash showLineNumbers
+pip uninstall vylux-manual
+```
+
+If your `pip` and `python` do not match, use the interpreter-specific form instead:
+
+```bash showLineNumbers
+python -m pip uninstall vylux-manual
+```
+
+After uninstalling, `vylux-manual` disappears from that environment. If the command still exists, it usually means another Python environment on your `PATH` also has it installed.
 
 ## Signed delivery helpers
 

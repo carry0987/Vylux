@@ -24,14 +24,18 @@ tools/manual/
 先從 repo root 以 editable mode 安裝這個工具：
 
 ```bash showLineNumbers
-python -m pip install -e tools/manual
+pip install -e tools/manual
 ```
 
 安裝 RustFS 相關依賴：
 
 ```bash showLineNumbers
-python -m pip install -e 'tools/manual[rustfs]'
+pip install -e 'tools/manual[rustfs]'
 ```
+
+:::tip 如果 `pip` 和 `python` 沒有指向同一個環境
+在大多數 conda 和 virtualenv 工作流裡，`pip` 和 `python` 會屬於同一個目前啟用的環境。若你的環境不是這樣，請把 `pip ...` 改成 `python -m pip ...`。
+:::
 
 ## 環境變數載入順序
 
@@ -51,7 +55,7 @@ python -m pip install -e 'tools/manual[rustfs]'
 在 `gh-pages` 分支根目錄執行：
 
 ```bash showLineNumbers
-python -m pip install -e tools/manual
+pip install -e tools/manual
 vylux-manual --help
 ```
 
@@ -69,6 +73,8 @@ python -m vylux_manual --help
 4. 依你想驗證的流程，逐一執行單一指令，例如上傳檔案、送出工作、查詢狀態，或產生簽名 URL。
 
 本頁以 `vylux-manual` 這個安裝後產生的命令作為主要入口。
+
+安裝完成後，只要 shell 使用的是同一個 Python 環境，就可以直接執行 `vylux-manual`。repo root 主要影響的是安裝命令，以及工具會讀取的 `.env` 檔案位置。
 
 ## 支援的指令
 
@@ -130,6 +136,36 @@ vylux-manual delete-media deadbeef
 4. 處理完成後，再產生播放或交付所需的簽名 URL。
 
 這樣能讓這套工具維持在一次性驗證與理解流程的用途，而不是演變成自動化系統。
+
+## 修改工具程式後
+
+如果你修改了 `tools/manual/src/vylux_manual` 底下的 Python 程式，通常不需要重新編譯或重新安裝。因為套件是以 editable mode 安裝，`vylux-manual` 本來就直接指向你的工作樹。
+
+多數情況下，流程就是：
+
+```bash showLineNumbers
+vylux-manual --help
+```
+
+儲存修改後，直接重新執行你要測試的命令即可。
+
+只有在你修改了 `pyproject.toml` 的 packaging metadata、加入新依賴，或更動 console script 定義時，才需要重新執行安裝命令。
+
+## 卸載工具
+
+要從目前的 Python 環境移除這個工具，可以執行：
+
+```bash showLineNumbers
+pip uninstall vylux-manual
+```
+
+如果你的 `pip` 和 `python` 在 shell 中不是同一套環境，則改用 interpreter-specific 的寫法：
+
+```bash showLineNumbers
+python -m pip uninstall vylux-manual
+```
+
+卸載後，`vylux-manual` 會從該環境中消失。若命令仍然存在，通常表示你的 `PATH` 上還有另一個 Python 環境也安裝了它。
 
 ## 簽名與播放輔助
 

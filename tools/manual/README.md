@@ -14,14 +14,17 @@ The toolkit is intentionally kept on the `gh-pages` branch so the main applicati
 Install the toolkit in editable mode from the repo root:
 
 ```bash
-python -m pip install -e tools/manual
+pip install -e tools/manual
 ```
 
 Install the optional dependency with:
 
 ```bash
-python -m pip install -e 'tools/manual[rustfs]'
+pip install -e 'tools/manual[rustfs]'
 ```
+
+> [!NOTE]
+> In most conda and virtualenv setups, `pip` and `python` point to the same active environment. If they do not, use `python -m pip ...` instead.
 
 Check that the CLI is available:
 
@@ -48,9 +51,11 @@ This matches the local development workflow documented in the site.
 ## How to use it
 
 1. Prepare `.env` or `.env.local` in the repo root.
-2. Install the toolkit with `python -m pip install -e tools/manual`.
+2. Install the toolkit with `pip install -e tools/manual`.
 3. Run `vylux-manual --help` to see all supported commands.
 4. Use one command at a time for the exact workflow you want to test.
+
+After installation, any shell using the same Python environment can run `vylux-manual`.
 
 Typical examples:
 
@@ -73,6 +78,34 @@ If you want to test the whole flow end to end, the usual order is:
 2. Create a job.
 3. Poll the job with `job-status`.
 4. Generate delivery URLs after processing completes.
+
+## After editing the toolkit
+
+If you modify Python files under `tools/manual/src/vylux_manual`, you usually do not need to rebuild or reinstall the package. The editable install already points `vylux-manual` at your working tree.
+
+Run the CLI again after saving your changes:
+
+```bash
+vylux-manual --help
+```
+
+Reinstall only when you change packaging metadata in `pyproject.toml`, add dependencies, or change console script definitions.
+
+## Uninstalling
+
+Remove the toolkit from the current Python environment with:
+
+```bash
+pip uninstall vylux-manual
+```
+
+If `pip` and `python` do not match in your shell, use:
+
+```bash
+python -m pip uninstall vylux-manual
+```
+
+If `vylux-manual` is still available afterward, another Python environment on your `PATH` likely has it installed too.
 
 ## Example workflow
 
