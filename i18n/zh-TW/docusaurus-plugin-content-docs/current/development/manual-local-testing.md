@@ -15,16 +15,6 @@ tools/manual/
 
 這套工具的定位是本機與可信任工程環境用的輔助工具，不是 production SDK。
 
-## 為什麼放在 docs branch
-
-這些 helper 對手動測試很有用，但它們不是 Vylux runtime 的一部分。
-
-放在 docs branch 的好處是：
-
-- main application branch 保持乾淨
-- 工具可以和文檔一起版本化
-- 工程師 clone docs branch 後就能直接使用
-
 ## 先決條件
 
 - Python 3.11+

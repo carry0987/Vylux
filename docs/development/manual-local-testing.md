@@ -15,16 +15,6 @@ tools/manual/
 
 It is intended for local and trusted engineering workflows, not as a production SDK.
 
-## Why it lives on the docs branch
-
-These helpers are useful for manual testing, but they are not part of the Vylux runtime.
-
-Keeping them on the docs branch gives you:
-
-- a clean main application branch
-- versioned tooling that can evolve with the docs
-- a stable place for engineers to clone and run local test helpers
-
 ## Prerequisites
 
 - Python 3.11+
