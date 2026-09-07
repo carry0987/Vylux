@@ -43,7 +43,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/setup@v2
         with:
-          version: 11
+          version: 12
           cache: true
           install: false
           runtime: node@${{ matrix.node-version }}
