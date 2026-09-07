@@ -1,6 +1,6 @@
 ---
 title: Manual Local Testing Toolkit
-description: "How to use the Python helpers on the gh-pages branch for local RustFS uploads, job creation, playback signing, and cleanup flows."
+description: "Python testing toolkit for manual local Vylux workflows: job creation, playback signing, cleanup, and object uploads to any S3-compatible storage."
 ---
 
 # Manual Local Testing Toolkit

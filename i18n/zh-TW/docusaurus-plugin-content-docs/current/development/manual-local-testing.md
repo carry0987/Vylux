@@ -1,6 +1,6 @@
 ---
 title: 本機手動測試工具
-description: "說明 gh-pages 分支上的 Python helpers，如何用來做 RustFS 上傳、建立工作、播放簽名與清理流程。"
+description: "本機手動測試用 Python 工具套件：支援任意 S3-compatible storage 的上傳、job 建立、播放簽名與清理流程。"
 ---
 
 # 本機手動測試工具
