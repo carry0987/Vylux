@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.3](https://github.com/carry0987/Vylux/compare/v2.2.2...v2.2.3) (2026-09-14)
+
+
+### deps
+
+* **go:** update aws sdk and transitive dependencies ([6a8c046](https://github.com/carry0987/Vylux/commit/6a8c0462e8384e085b4b43a8f267c37e6458b32c))
+
 ## [2.2.2](https://github.com/carry0987/Vylux/compare/v2.2.1...v2.2.2) (2026-09-06)
 
 
