@@ -33,6 +33,8 @@ The release workflow in `.github/workflows/docker.yml` builds and publishes the 
 
 Unless you are testing an unreleased Dockerfile change, standard Docker Compose and Kubernetes deployments can pull this image directly without building locally.
 
+The published image already includes HEIF support in the runtime layer through Alpine's `vips-heif` package. That is what enables HEIF-family inputs such as `heic`, `heif`, and `avif`, and also enables AVIF output in container deployments.
+
 ## Building the repository Dockerfile locally
 
 If you do need to build the repository Dockerfile yourself, keep the current libvips packaging rule intact.
@@ -45,6 +47,7 @@ Operationally, that means:
 
 - do not reintroduce the default stable repositories ahead of `vips-dev`
 - if you fork the Dockerfile, keep the edge-only builder repository setup
+- keep the runtime `vips-heif` package if you need HEIF-family inputs or AVIF output
 - current CI validation tracks libvips `8.18.6`
 
 ## Local development

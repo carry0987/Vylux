@@ -12,7 +12,21 @@ description: "用最短路徑在本機啟動 Vylux、準備依賴、建立第一
 - `curl`
 - 供來源物件與輸出物件使用的 S3-compatible storage，例如 RustFS、R2 或 S3
 
-如果你直接使用專案提供的 Docker image，runtime 內已包含 `ffmpeg`、`vips` 與 `packager`；若以 `go run` 在 host 上開發，則需要自己安裝 FFmpeg、libvips、`pkg-config` 與 Shaka Packager。若是在 macOS 上使用 Homebrew，`brew install vips pkg-config` 會提供 Go 圖片處理路徑連結所需的 libvips toolchain。
+如果你直接使用專案提供的 Docker image，runtime 內已包含 `ffmpeg`、`vips`、`vips-heif` 與 `packager`；若以 `go run` 在 host 上開發，則需要自己安裝 FFmpeg、libvips、`pkg-config` 與 Shaka Packager。
+
+如果你希望在 host-run 模式下支援 `heic`、`heif`、`avif` 這類 HEIF-family 輸入，或希望輸出 AVIF，還要確認你本機的 libvips 具備 HEIF support。實務上通常代表還需要有 `libheif`，或 distro 對應的 HEIF plugin 套件可供 libvips 載入。
+
+若是在 macOS 上使用 Homebrew，`brew install vips libheif pkg-config` 會是一個較保險的圖片處理 toolchain 起點。
+
+也建議順手做一次本機確認：
+
+```bash
+vips -l | grep -i heif
+```
+
+正常情況下，輸出裡應該看得到像 `heifload`、`heifload_buffer`、`heifsave` 這類 loader / saver 項目。若這些項目不存在，就表示 host-run 的 Vylux 很可能會在處理 `heic`、`heif`、`avif` 輸入時解碼失敗，或在輸出 AVIF 時編碼失敗，即使系統表面上已經安裝了 libvips。
+
+這個檢查只代表本機 libvips 具備 HEIF-family 靜態圖片的 decode / encode 能力；不代表已支援 animated AVIF 或 animated HEIF sequence。Vylux 目前不會在同步 `/img` 路徑中把這些格式當成動畫輸入處理。
 
 ## 本機開發建議流程
 

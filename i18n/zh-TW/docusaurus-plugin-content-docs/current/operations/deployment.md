@@ -33,6 +33,8 @@ CMD ["--mode=all"]
 
 除非你是在驗證尚未發布的 Dockerfile 變更，否則標準的 Docker Compose 與 Kubernetes 部署都可以直接 pull 這個映像，不需要本機重新 build。
 
+目前已發布映像的 runtime layer 也已透過 Alpine 的 `vips-heif` 內建 HEIF support。這就是容器部署中 `heic`、`heif`、`avif` 這類 HEIF-family 輸入可用，以及 AVIF 輸出可用的關鍵。
+
 ## 本機建置 repository Dockerfile 時的注意事項
 
 如果你確實需要自行 build repository 內的 Dockerfile，請保留目前 libvips 套件來源的處理方式。
@@ -45,6 +47,7 @@ builder stage 會刻意先覆寫 `/etc/apk/repositories`，只保留 `edge/main`
 
 - 不要把預設 stable repositories 再加回 `vips-dev` 安裝流程前面
 - 若你 fork 了 Dockerfile，請保留 edge-only 的 builder repository 設定
+- 若你需要 HEIF-family 輸入或 AVIF 輸出，也不要移除 runtime 內的 `vips-heif`
 - 目前 CI 驗證追蹤的 libvips 版本是 `8.18.6`
 
 ## 本機開發

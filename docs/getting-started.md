@@ -12,7 +12,21 @@ description: "Start Vylux locally with the shortest possible path, prepare depen
 - `curl`
 - S3-compatible storage for source and derived assets such as RustFS, R2, or S3
 
-If you use the repository Docker image directly, the runtime already contains `ffmpeg`, `vips`, and `packager`. If you run Vylux on the host with `go run`, install FFmpeg, libvips, `pkg-config`, and Shaka Packager locally. On macOS with Homebrew, `brew install vips pkg-config` provides the libvips toolchain that the Go image pipeline links against.
+If you use the repository Docker image directly, the runtime already contains `ffmpeg`, `vips`, `vips-heif`, and `packager`. If you run Vylux on the host with `go run`, install FFmpeg, libvips, `pkg-config`, and Shaka Packager locally.
+
+If you want HEIF-family inputs such as `heic`, `heif`, or `avif`, or you want AVIF output while running on the host, make sure your local libvips installation includes HEIF support as well. In practice, that usually means having `libheif` or a distro-specific HEIF plugin package available to libvips.
+
+On macOS with Homebrew, `brew install vips libheif pkg-config` is a safe baseline for the image pipeline toolchain.
+
+A quick local verification is:
+
+```bash
+vips -l | grep -i heif
+```
+
+Look for loader and saver entries such as `heifload`, `heifload_buffer`, and `heifsave`. If they are missing, host-run Vylux will usually fail to decode `heic` / `heif` / `avif` inputs or fail to produce AVIF output even though libvips itself is installed.
+
+This check only confirms that local libvips can handle HEIF-family static image decode / encode. It does not imply support for animated AVIF or animated HEIF sequences, which Vylux does not currently process as animated inputs on the synchronous `/img` path.
 
 ## Recommended local development flow
 

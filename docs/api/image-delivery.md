@@ -53,6 +53,13 @@ Examples:
 | `encoded_source` | URL-escaped source object key |
 | `format` | output format: `webp`, `avif`, `jpg`, `png`, or `gif` |
 
+Animation notes:
+
+- animated output is supported only for `webp` and `gif`
+- animated source images cannot be converted to static outputs such as `avif`, `jpg`, or `png`
+- HEIF-family inputs such as `heic`, `heif`, and `avif` are accepted as source formats when the runtime image includes HEIF support, but they are currently treated as static images on the synchronous `/img` path
+- animated AVIF and animated HEIF sequences are not currently supported on the synchronous `/img` path
+
 ### Canonicalization rules
 
 Vylux signs a canonical form, not the raw browser URL string:

@@ -53,6 +53,13 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 | `encoded_source` | URL-escaped 的原始 object key |
 | `format` | 輸出格式，支援 `webp`、`avif`、`jpg`、`png`、`gif` |
 
+動畫補充說明：
+
+- 動畫輸出目前只支援 `webp` 與 `gif`
+- 動畫來源圖不能轉成 `avif`、`jpg`、`png` 這類靜態輸出格式
+- `heic`、`heif`、`avif` 這類 HEIF-family 輸入，在 runtime image 具備 HEIF 支援時可作為 source 格式使用；但在目前同步 `/img` 路徑中，仍以靜態圖片流程處理
+- animated AVIF 與 animated HEIF sequence 目前不在同步 `/img` 路徑的支援範圍內
+
 ### 簽名 canonicalization
 
 Vylux 不是直接對瀏覽器 URL 字串做 HMAC，而是對 canonical form 做簽名：
