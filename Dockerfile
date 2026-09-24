@@ -28,6 +28,7 @@ ARG SHAKA_PACKAGER_VERSION=v3.9.3
 
 RUN apk add --no-cache \
     vips \
+    vips-heif \
     ffmpeg \
     curl \
     ca-certificates
