@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.4](https://github.com/carry0987/Vylux/compare/v2.2.3...v2.2.4) (2026-09-24)
+
+
+### Bug Fixes
+
+* **image:** enable heif-family input support in Docker ([#53](https://github.com/carry0987/Vylux/issues/53)) ([f0d12fc](https://github.com/carry0987/Vylux/commit/f0d12fc9038d719d11019055903cef15c6fe6232))
+
 ## [2.2.3](https://github.com/carry0987/Vylux/compare/v2.2.2...v2.2.3) (2026-09-14)
 
 
