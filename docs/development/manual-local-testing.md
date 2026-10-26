@@ -18,6 +18,7 @@ It is intended for local and trusted engineering workflows, not as a production 
 ## Prerequisites
 
 - Python 3.11+
+- `cryptography`, installed automatically with the toolkit, for AES-GCM source tokens
 - `boto3` if you want to upload, list, head, or delete objects in RustFS
 - a working `.env` and, when needed, `.env.local`
 
@@ -91,6 +92,7 @@ The toolkit currently supports:
 - retrying failed jobs
 - deleting derived media by content hash
 - building signed `/img`, `/original`, and `/thumb` URLs
+- generating reusable AES-GCM source tokens when `IMAGE_SOURCE_KEY` is configured
 - building `/api/key/{id}` URLs and Bearer tokens
 
 ## Common flows
@@ -177,10 +179,28 @@ The toolkit can also construct the public-facing routes that your application wo
 vylux-manual image-url uploads/sample.png webp --options w320_h180
 ```
 
+When `IMAGE_SOURCE_KEY` is present in `.env` or `.env.local`, this command automatically encrypts the source key and uses the encrypted signing domain. Without it, the command retains the plaintext URL behavior.
+
+Generate and save a reusable token separately:
+
+```bash showLineNumbers
+vylux-manual source-token uploads/sample.png
+vylux-manual image-url uploads/sample.png webp --options w320_h180 --token '<saved-token>'
+```
+
+Reproduce the documented interoperability vector:
+
+```bash showLineNumbers
+vylux-manual source-token static/forum/recommend-cover.png \
+	--nonce 000102030405060708090a0b
+```
+
+`--nonce` is only for test vectors. Omit it during normal use so the toolkit generates a secure random nonce.
+
 ### Signed original URL
 
 ```bash showLineNumbers
-vylux-manual original-url uploads/sample.png
+vylux-manual original-url uploads/sample.png --token '<saved-token>'
 ```
 
 ### Signed thumbnail URL
@@ -197,7 +217,7 @@ vylux-manual key-url <key-id> <content-hash> --ttl 3600
 
 ## Security notes
 
-- Never expose `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET` to browsers.
+- Never expose `API_KEY`, `HMAC_SECRET`, `IMAGE_SOURCE_KEY`, or `KEY_TOKEN_SECRET` to browsers.
 - Treat this toolkit as a trusted local helper, not as a public client.
 - If you share shell history or screenshots, remember that command lines may include sensitive values.
 

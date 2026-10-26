@@ -108,7 +108,7 @@ frontend 通常只需要兩個值：
 - 應用回傳給前端的 cover / thumbnail URL 走的是 `/thumb`，不是 raw bucket key
 - 加密 HLS 播放走的是對應媒體結果的 public playlist route
 - `/api/key/{id}` 在沒 token 時回 `401`，有合法 token 時回 `200`
-- 公開客戶端永遠看不到 `API_KEY`、`HMAC_SECRET`、`KEY_TOKEN_SECRET`
+- 公開客戶端永遠看不到 `API_KEY`、`HMAC_SECRET`、`IMAGE_SOURCE_KEY`、`KEY_TOKEN_SECRET`
 
 ## 相關文件
 

@@ -7,19 +7,19 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 
 這一組端點負責同步回應圖片或既有媒體物件，適合直接給瀏覽器、CDN 或上游應用使用。
 
-下方簽名範例涉及的 `BASE_URL` 與 `HMAC_SECRET` 完整說明，請見 [設定](../operations/configuration)。
+下方簽名範例涉及的 `BASE_URL`、`HMAC_SECRET` 與 optional `IMAGE_SOURCE_KEY` 完整說明，請見 [設定](../operations/configuration)。
 
 ## 端點總覽
 
 ### `/img`
 
-- endpoint: `GET /img/{sig}/{opts}/{encoded_source}.{format}`
+- endpoint: `GET /img/{sig}/{opts}/{source}.{format}`
 - auth: HMAC URL 簽名
 - 後端儲存: 從 source bucket 讀圖，並把衍生快取寫進 media bucket
 
 ### `/original`
 
-- endpoint: `GET /original/{sig}/{encoded_key}`
+- endpoint: `GET /original/{sig}/{source}`
 - auth: HMAC URL 簽名
 - 後端儲存: 不做轉換，直接代理 source bucket 物件
 
@@ -29,9 +29,17 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 - auth: HMAC URL 簽名
 - 後端儲存: 從 media bucket 代理既有縮圖、封面或靜態媒體物件
 
-## `GET /img/{sig}/{opts}/{encoded_source}.{format}`
+## `GET /img/{sig}/{opts}/{source}.{format}`
 
 ### 路徑格式
+
+啟用 `IMAGE_SOURCE_KEY` 時：
+
+```text
+/img/{sig}/{opts}/{source_token}.{format}
+```
+
+`IMAGE_SOURCE_KEY` 為空或未設定時：
 
 ```text
 /img/{sig}/{opts}/{encoded_source}.{format}
@@ -42,6 +50,7 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 ```text
 /img/<sig>/w640_h360_q80/uploads%2Favatars%2Fsample.jpg.webp
 /img/<sig>/w1200/uploads%2Fproducts%2Fhero.png.avif
+/img/<sig>/w640_h360_q80/AQABAgMEBQYHCAkK....webp
 ```
 
 ### 參數語義
@@ -50,7 +59,7 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 | --- | --- |
 | `sig` | `HMAC-SHA256` 十六進位簽名 |
 | `opts` | 圖片參數，支援 `w`、`h`、`q`，例如 `w640_h360_q80` |
-| `encoded_source` | URL-escaped 的原始 object key |
+| `source` | 啟用 `IMAGE_SOURCE_KEY` 時為 AES-256-GCM source token；否則為 URL-escaped source object key |
 | `format` | 輸出格式，支援 `webp`、`avif`、`jpg`、`png`、`gif` |
 
 動畫補充說明：
@@ -62,23 +71,34 @@ description: "`/img`、`/original`、`/thumb` 的 URL 模型、HMAC 簽名方式
 
 ### 簽名 canonicalization
 
-Vylux 不是直接對瀏覽器 URL 字串做 HMAC，而是對 canonical form 做簽名：
+兩種模式都會把 `opts` 固定排序為 `w` -> `h` -> `q`，並將 `jpeg` 正規化為 `jpg`。
 
-- `opts` 會固定排序為 `w` -> `h` -> `q`
-- `encoded_source` 會先解碼成 object key
-- `jpeg` 會被正規化為 `jpg`
-
-實際上，簽名時的字串可理解為：
+明文模式會先把 `encoded_source` 解碼成 object key，再簽署：
 
 ```text
 {canonical_options}/{decoded_source_key}.{canonical_format}
 ```
 
+加密模式先加密 source key，再簽署以下以 NUL 分隔的欄位：
+
+```text
+"vylux/image-url/v1" || "\x00" || canonical_options ||
+"\x00" || source_token || "\x00" || canonical_format
+```
+
+Token binary layout：
+
+```text
+0x01 || nonce[12] || AES-256-GCM(source_key, nonce, "vylux/image-source/v1")
+```
+
+完整結果使用無 padding Base64URL 編碼。AES-GCM 會附加 16-byte authentication tag。每個新 token 都必須使用密碼學安全的隨機 nonce；禁止固定、重用或從 source key 推導 nonce。
+
 :::tip 要簽的是 canonical form，不是瀏覽器看到的原始 URL
 如果 signer 與 Vylux 對 `opts` 順序、decoded object key 或 `jpeg` / `jpg` 的正規化理解不同，就算 URL 看起來合理，也會回 `403`。
 :::
 
-### shell 簽名與 curl 範例
+### 明文模式 shell 簽名與 curl 範例
 
 ```bash showLineNumbers
 BASE_URL='http://localhost:3000'
@@ -94,6 +114,90 @@ SIG="$(printf '%s/%s' "$OPTIONS" "$CANONICAL_SOURCE" \
 curl -L "$BASE_URL/img/$SIG/$OPTIONS/$ENCODED_SOURCE"
 ```
 
+### Node.js 加密來源範例
+
+以下 Node.js 22+ 範例只使用 `node:crypto`。請只在能安全讀取兩個 secrets 的可信 backend 執行。
+
+```js showLineNumbers
+import { createCipheriv, createHmac, randomBytes } from "node:crypto";
+
+const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
+const HMAC_SECRET = process.env.HMAC_SECRET;
+const IMAGE_SOURCE_KEY = process.env.IMAGE_SOURCE_KEY;
+const SOURCE_AAD = Buffer.from("vylux/image-source/v1", "utf8");
+
+if (!HMAC_SECRET || !IMAGE_SOURCE_KEY) {
+  throw new Error("HMAC_SECRET and IMAGE_SOURCE_KEY are required");
+}
+
+function createSourceToken(sourceKey, nonce = randomBytes(12)) {
+  const key = Buffer.from(IMAGE_SOURCE_KEY, "hex");
+  const plaintext = Buffer.from(sourceKey, "utf8");
+  if (IMAGE_SOURCE_KEY.length !== 64 || key.length !== 32) {
+    throw new Error("IMAGE_SOURCE_KEY must be exactly 64 hex characters");
+  }
+  if (plaintext.length === 0 || plaintext.length > 1024) {
+    throw new Error("source key must contain 1..1024 UTF-8 bytes");
+  }
+
+  const cipher = createCipheriv("aes-256-gcm", key, nonce);
+  cipher.setAAD(SOURCE_AAD);
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  return Buffer.concat([
+    Buffer.from([1]),
+    nonce,
+    ciphertext,
+    cipher.getAuthTag(),
+  ]).toString("base64url");
+}
+
+function signDomain(domain, ...parts) {
+  const mac = createHmac("sha256", Buffer.from(HMAC_SECRET, "utf8"));
+  mac.update(domain, "utf8");
+  for (const part of parts) {
+    mac.update(Buffer.from([0]));
+    mac.update(part, "utf8");
+  }
+  return mac.digest("hex");
+}
+
+function imageURL(token, { width, height, quality, format }) {
+  const options = [
+    width !== undefined ? `w${width}` : undefined,
+    height !== undefined ? `h${height}` : undefined,
+    quality !== undefined ? `q${quality}` : undefined,
+  ].filter(Boolean).join("_");
+  const canonicalFormat = format.toLowerCase() === "jpeg" ? "jpg" : format.toLowerCase();
+  const signature = signDomain("vylux/image-url/v1", options, token, canonicalFormat);
+  return `${BASE_URL}/img/${signature}/${options}/${token}.${canonicalFormat}`;
+}
+
+function originalURL(token) {
+  const signature = signDomain("vylux/original-url/v1", token);
+  return `${BASE_URL}/original/${signature}/${token}`;
+}
+
+const token = createSourceToken("uploads/avatars/sample.jpg");
+console.log({
+  token,
+  image: imageURL(token, { width: 640, height: 360, quality: 80, format: "webp" }),
+  original: originalURL(token),
+});
+```
+
+需要穩定 CDN URL 時，請儲存並重用 `token`。為同一來源生成新 token 不會使舊 token 失效。
+
+跨語言固定測試向量：
+
+```text
+IMAGE_SOURCE_KEY = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+nonce            = 000102030405060708090a0b
+source key       = static/forum/recommend-cover.png
+expected token   = AQABAgMEBQYHCAkKC2Vs1EIpKuLQpkkakR6nAUwBWMoblWBW_FZUJL4KkkRQvPT1Ob-M_IsC7s3mG3OUcg
+```
+
+測試時將 `Buffer.from("000102030405060708090a0b", "hex")` 傳入第二個參數。固定 nonce 僅供 interoperability test；production 必須使用 `randomBytes(12)`。
+
 ### 成功回應特性
 
 - `200 OK`
@@ -106,17 +210,19 @@ curl -L "$BASE_URL/img/$SIG/$OPTIONS/$ENCODED_SOURCE"
 | 狀態碼 | 代表情況 |
 | --- | --- |
 | `400` | 參數錯誤、source encoding 錯誤、unsupported format |
-| `403` | 簽名無效 |
+| `403` | 簽名無效或 encrypted source token 無效 |
 | `404` | source object 不存在 |
 | `422` | 原圖存在但無法解碼，或動畫轉靜態等不可處理情況 |
 | `502` | source storage 暫時不可用 |
 | `500` | 其他內部處理錯誤 |
 
-## `GET /original/{sig}/{encoded_key}`
+## `GET /original/{sig}/{source}`
 
 這個端點用於受控地代理 source bucket 原始物件，不做任何轉換。
 
-### shell 簽名與 curl 範例
+啟用 source encryption 時，請重用 `/img` 的 token，並簽署 `"vylux/original-url/v1\x00{token}"`。上方 Node.js 範例同時示範兩種路由。
+
+### 明文模式 shell 簽名與 curl 範例
 
 ```bash showLineNumbers
 BASE_URL='http://localhost:3000'
@@ -171,8 +277,9 @@ curl -L "$BASE_URL/thumb/$SIG/$ENCODED_KEY"
 :::
 
 - 不要在前端暴露 `HMAC_SECRET`；簽名應由上游應用或授權服務產生
+- 不要在前端暴露 `IMAGE_SOURCE_KEY`
 - 讓 object key 與輸出格式進入簽名範圍，避免 URL 被竄改後仍可命中
-- 圖片 URL 可以交給 CDN 長時間快取；內容變更應透過不同 key 或 hash 避免覆寫語義
+- 需要穩定 CDN URL 時，請儲存並重用 encrypted source token
 
 ### signer 應該放在哪一層
 
@@ -180,7 +287,7 @@ curl -L "$BASE_URL/thumb/$SIG/$ENCODED_KEY"
 
 - 你的主應用 backend
 - 專門的內部簽名服務
-- 能安全讀取 `HMAC_SECRET` 的可信 edge worker
+- 能安全讀取 `HMAC_SECRET` 與 optional `IMAGE_SOURCE_KEY` 的可信 edge worker
 
 常見請求流程是：
 

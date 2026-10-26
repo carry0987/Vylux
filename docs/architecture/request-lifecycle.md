@@ -38,8 +38,11 @@ sequenceDiagram
 	participant Source as Source Bucket
 	participant Vips as libvips
 
-	Client->>Server: GET /img/{sig}/{opts}/{encoded_source}.{format}
+	Client->>Server: GET /img/{sig}/{opts}/{source}.{format}
 	Server->>Server: validate HMAC and canonical options
+	opt IMAGE_SOURCE_KEY enabled
+		Server->>Server: authenticate and decrypt source token
+	end
 	Server->>LRU: lookup
 	alt LRU hit
 		LRU-->>Server: image bytes

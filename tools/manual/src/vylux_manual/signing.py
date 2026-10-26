@@ -4,9 +4,17 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import time
 from typing import Tuple
 from urllib.parse import unquote
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+
+IMAGE_SOURCE_AAD = b"vylux/image-source/v1"
+IMAGE_SOURCE_TOKEN_VERSION = 1
+MAX_IMAGE_SOURCE_KEY_BYTES = 1024
 
 
 def sign(secret: str, options: str, source: str) -> str:
@@ -85,6 +93,61 @@ def sign_image(secret: str, raw_options: str, raw_source_path: str) -> Tuple[str
 def sign_original(secret: str, raw_object_key: str) -> Tuple[str, str]:
     canonical_key = canonicalize_object_key(raw_object_key)
     return sign(secret, "", canonical_key), canonical_key
+
+
+def create_image_source_token(source_key: str, image_source_key: str, nonce: bytes | None = None) -> str:
+    plaintext = source_key.encode("utf-8")
+    if not plaintext or len(plaintext) > MAX_IMAGE_SOURCE_KEY_BYTES:
+        raise ValueError("invalid image source key")
+    if len(image_source_key) != 64:
+        raise ValueError("IMAGE_SOURCE_KEY must be exactly 64 hex characters")
+    try:
+        key = bytes.fromhex(image_source_key)
+    except ValueError as exc:
+        raise ValueError("IMAGE_SOURCE_KEY must be valid hex") from exc
+    if len(key) != 32:
+        raise ValueError("IMAGE_SOURCE_KEY must decode to 32 bytes")
+
+    nonce = nonce if nonce is not None else os.urandom(12)
+    if len(nonce) != 12:
+        raise ValueError("image source nonce must be exactly 12 bytes")
+
+    ciphertext_and_tag = AESGCM(key).encrypt(nonce, plaintext, IMAGE_SOURCE_AAD)
+    token = bytes([IMAGE_SOURCE_TOKEN_VERSION]) + nonce + ciphertext_and_tag
+    return base64.urlsafe_b64encode(token).decode("ascii").rstrip("=")
+
+
+def sign_domain(secret: str, domain: str, *parts: str) -> str:
+    mac = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
+    mac.update(domain.encode("utf-8"))
+    for part in parts:
+        mac.update(b"\x00")
+        mac.update(part.encode("utf-8"))
+    return mac.hexdigest()
+
+
+def canonicalize_output_format(raw: str) -> str:
+    output_format = raw.lower().lstrip(".")
+    if output_format == "jpeg":
+        output_format = "jpg"
+    if not output_format:
+        raise ValueError("missing output format")
+    return output_format
+
+
+def sign_encrypted_image(secret: str, raw_options: str, source_token: str, output_format: str) -> Tuple[str, str, str]:
+    if not source_token or "/" in source_token:
+        raise ValueError("invalid source token")
+    canonical_options = canonicalize_image_options(raw_options)
+    canonical_format = canonicalize_output_format(output_format)
+    signature = sign_domain(secret, "vylux/image-url/v1", canonical_options, source_token, canonical_format)
+    return signature, canonical_options, canonical_format
+
+
+def sign_encrypted_original(secret: str, source_token: str) -> str:
+    if not source_token or "/" in source_token:
+        raise ValueError("invalid source token")
+    return sign_domain(secret, "vylux/original-url/v1", source_token)
 
 
 def sign_thumb(secret: str, raw_object_key: str) -> Tuple[str, str]:

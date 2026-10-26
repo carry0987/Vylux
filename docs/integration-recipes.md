@@ -108,7 +108,7 @@ Before calling these integrations done, verify:
 - cover and thumbnail URLs returned by your app use `/thumb`, not raw bucket keys
 - encrypted HLS playback works with `/stream/{hash}/master.m3u8`
 - `/api/key/{id}` returns `401` without a token and `200` with a valid token
-- no public client ever sees `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET`
+- no public client ever sees `API_KEY`, `HMAC_SECRET`, `IMAGE_SOURCE_KEY`, or `KEY_TOKEN_SECRET`
 
 ## Related docs
 

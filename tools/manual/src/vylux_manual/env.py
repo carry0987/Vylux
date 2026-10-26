@@ -12,6 +12,7 @@ class Settings:
     base_url: str
     api_key: str
     hmac_secret: str
+    image_source_key: str
     key_token_secret: str
     source_s3_endpoint: str
     source_s3_access_key: str
@@ -58,7 +59,7 @@ def load_settings() -> Settings:
     merged: Dict[str, str] = {}
     merged.update(parse_dotenv(repo_root / ".env"))
     merged.update(parse_dotenv(repo_root / ".env.local"))
-    merged.update({key: value for key, value in os.environ.items() if key in merged or key.startswith(("BASE_URL", "API_KEY", "HMAC_SECRET", "KEY_TOKEN_SECRET", "SOURCE_", "MEDIA_"))})
+    merged.update({key: value for key, value in os.environ.items() if key in merged or key.startswith(("BASE_URL", "API_KEY", "HMAC_SECRET", "IMAGE_SOURCE_KEY", "KEY_TOKEN_SECRET", "SOURCE_", "MEDIA_"))})
 
     def need(key: str) -> str:
         value = merged.get(key, "").strip()
@@ -71,6 +72,7 @@ def load_settings() -> Settings:
         base_url=need("BASE_URL"),
         api_key=need("API_KEY"),
         hmac_secret=need("HMAC_SECRET"),
+        image_source_key=merged.get("IMAGE_SOURCE_KEY", "").strip(),
         key_token_secret=need("KEY_TOKEN_SECRET"),
         source_s3_endpoint=need("SOURCE_S3_ENDPOINT"),
         source_s3_access_key=need("SOURCE_S3_ACCESS_KEY"),

@@ -75,6 +75,7 @@ Vylux requires both source and media storage settings explicitly. Even if both r
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `HMAC_SECRET` | yes | none | signs image and media-delivery URLs |
+| `IMAGE_SOURCE_KEY` | no | empty | enables AES-256-GCM source tokens for `/img` and `/original` |
 | `API_KEY` | yes | none | protects `/api/*` management endpoints |
 | `WEBHOOK_SECRET` | yes | none | signs webhook callback payloads |
 | `KEY_TOKEN_SECRET` | yes | none | verifies Bearer tokens for `/api/key/{id}` |
@@ -82,10 +83,13 @@ Vylux requires both source and media storage settings explicitly. Even if both r
 
 ### Quick secret generation
 
-Vylux commonly uses five secrets. You can generate them with `openssl`:
+Vylux requires five secrets and supports one optional image-source encryption key. You can generate them with `openssl`:
 
 ```bash showLineNumbers
 # HMAC_SECRET
+openssl rand -hex 32
+
+# IMAGE_SOURCE_KEY (optional)
 openssl rand -hex 32
 
 # API_KEY
@@ -101,11 +105,12 @@ openssl rand -hex 16
 openssl rand -hex 32
 ```
 
-To append all five to `.env` in one step:
+To append all required secrets and enable encrypted image-source URLs in one step:
 
 ```bash showLineNumbers
 cat >> .env <<EOF
 HMAC_SECRET=$(openssl rand -hex 32)
+IMAGE_SOURCE_KEY=$(openssl rand -hex 32)
 API_KEY=$(openssl rand -hex 32)
 WEBHOOK_SECRET=$(openssl rand -hex 32)
 KEY_TOKEN_SECRET=$(openssl rand -hex 16)
@@ -125,12 +130,13 @@ head -c 16 /dev/urandom | xxd -p -c 32
 | Variable | Bits | Purpose |
 | --- | --- | --- |
 | `HMAC_SECRET` | 256 | Signs `/img`, `/original`, and related image URLs |
+| `IMAGE_SOURCE_KEY` | 256 | Encrypts source object keys embedded in `/img` and `/original` URLs |
 | `API_KEY` | 256 | Protects `/api/*` management and job endpoints |
 | `WEBHOOK_SECRET` | 256 | Signs webhook callback payloads |
 | `KEY_TOKEN_SECRET` | 128 | Signs playback key-delivery tokens |
 | `ENCRYPTION_KEY` | 256 | Wraps stored content keys before persistence |
 
-All five values are expected to be hex strings. `HMAC_SECRET`, `API_KEY`, `WEBHOOK_SECRET`, and `ENCRYPTION_KEY` should be at least 32 bytes. `KEY_TOKEN_SECRET` should be at least 16 bytes.
+All secret values are expected to be hex strings. `HMAC_SECRET`, `API_KEY`, `WEBHOOK_SECRET`, and `ENCRYPTION_KEY` should be at least 32 bytes. `KEY_TOKEN_SECRET` should be at least 16 bytes. When set, `IMAGE_SOURCE_KEY` must be exactly 32 bytes (64 hex characters); leave it empty or unset to retain plaintext source-key URLs.
 
 ## Worker, cache, and media toolchain
 
@@ -178,6 +184,7 @@ The following values are not consumed directly by the Vylux binary but are used 
 - `MAX_FILE_SIZE` must be at least `1`
 - `LARGE_FILE_THRESHOLD` must be less than or equal to `MAX_FILE_SIZE`
 - `BASE_URL` must not end with `/`
+- `IMAGE_SOURCE_KEY`, when set, must contain exactly 64 valid hex characters
 - `DATABASE_URL` must begin with `postgres://` or `postgresql://`
 
 ## R2 and local S3 tips

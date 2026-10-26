@@ -7,6 +7,7 @@ The toolkit is intentionally kept on the `gh-pages` branch so the main applicati
 ## Requirements
 
 - Python 3.11+
+- `cryptography` for encrypted image-source tokens (installed automatically)
 - `boto3` for RustFS object operations
 
 ## Quick start
@@ -70,6 +71,7 @@ vylux-manual job-status <job-id>
 - `upload`, `list`, `head`, `delete-object`: interact with the RustFS `source` and `media` buckets.
 - `create-audio`, `create-video-transcode`, `create-video-full`: submit media jobs to a Vylux instance.
 - `job-status`, `job-retry`, `delete-media`: inspect or clean up server-side processing results.
+- `source-token`: encrypt a source object key with `IMAGE_SOURCE_KEY` for reuse across image variants.
 - `image-url`, `original-url`, `thumb-url`, `key-url`: build signed delivery URLs and playback-related tokens.
 
 If you want to test the whole flow end to end, the usual order is:
@@ -114,10 +116,14 @@ vylux-manual upload source uploads/demo.mp4 /path/to/demo.mp4
 vylux-manual create-video-transcode deadbeef uploads/demo.mp4 --encrypt
 vylux-manual job-status <job-id>
 vylux-manual thumb-url videos/mo/movie-2026-04-01/cover.jpg
+vylux-manual source-token uploads/sample.png
+vylux-manual image-url uploads/sample.png webp --options w320_h180 --token '<saved-token>'
 ```
+
+When `IMAGE_SOURCE_KEY` is configured, `image-url` and `original-url` automatically create encrypted source tokens. Pass `--token` to reuse a stored token and keep CDN URLs stable. `--nonce <24-hex-characters>` exists only for reproducing interoperability vectors; omit it for normal use.
 
 ## Security notes
 
-- Do not expose `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET` to browsers.
+- Do not expose `API_KEY`, `HMAC_SECRET`, `IMAGE_SOURCE_KEY`, or `KEY_TOKEN_SECRET` to browsers.
 - These helpers are for local or trusted engineering workflows.
 - The toolkit is not a production SDK.

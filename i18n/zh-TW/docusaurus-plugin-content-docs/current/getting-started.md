@@ -98,6 +98,7 @@ BASE_URL=http://localhost:3000
 - `MEDIA_S3_SECRET_KEY`
 - `MEDIA_BUCKET`
 - `HMAC_SECRET`
+- `IMAGE_SOURCE_KEY`（optional；啟用 encrypted source URL）
 - `WEBHOOK_SECRET`
 - `API_KEY`
 - `KEY_TOKEN_SECRET`
@@ -110,6 +111,7 @@ BASE_URL=http://localhost:3000
 ```bash showLineNumbers
 cat >> .env.local <<EOF
 HMAC_SECRET=$(openssl rand -hex 32)
+IMAGE_SOURCE_KEY=$(openssl rand -hex 32)
 API_KEY=$(openssl rand -hex 32)
 WEBHOOK_SECRET=$(openssl rand -hex 32)
 KEY_TOKEN_SECRET=$(openssl rand -hex 16)

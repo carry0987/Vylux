@@ -75,6 +75,7 @@ Vylux 在 S3-compatible `PutObject` 上傳時，會送出 `x-amz-checksum-algori
 | 變數 | 必填 | 預設值 | 說明 |
 | --- | --- | --- | --- |
 | `HMAC_SECRET` | 是 | 無 | 圖片與媒體投遞 URL 簽名 |
+| `IMAGE_SOURCE_KEY` | 否 | 空值 | 啟用 `/img` 與 `/original` 的 AES-256-GCM source token |
 | `API_KEY` | 是 | 無 | 保護 `/api/*` 管理端點 |
 | `WEBHOOK_SECRET` | 是 | 無 | webhook callback `X-Signature` 的 HMAC 秘鑰 |
 | `KEY_TOKEN_SECRET` | 是 | 無 | `/api/key/{id}` Bearer token 驗證秘鑰 |
@@ -82,10 +83,13 @@ Vylux 在 S3-compatible `PutObject` 上傳時，會送出 `x-amz-checksum-algori
 
 ### 快速生成 secrets
 
-Vylux 常用的五個 secret 可以直接用 `openssl` 生成：
+Vylux 需要五個 secret，另支援一個 optional 圖片來源加密 key：
 
 ```bash showLineNumbers
 # HMAC_SECRET
+openssl rand -hex 32
+
+# IMAGE_SOURCE_KEY（optional）
 openssl rand -hex 32
 
 # API_KEY
@@ -106,6 +110,7 @@ openssl rand -hex 32
 ```bash showLineNumbers
 cat >> .env <<EOF
 HMAC_SECRET=$(openssl rand -hex 32)
+IMAGE_SOURCE_KEY=$(openssl rand -hex 32)
 API_KEY=$(openssl rand -hex 32)
 WEBHOOK_SECRET=$(openssl rand -hex 32)
 KEY_TOKEN_SECRET=$(openssl rand -hex 16)
@@ -125,12 +130,13 @@ head -c 16 /dev/urandom | xxd -p -c 32
 | Variable | Bits | Purpose |
 | --- | --- | --- |
 | `HMAC_SECRET` | 256 | 簽署 `/img`、`/original` 等圖片相關 URL |
+| `IMAGE_SOURCE_KEY` | 256 | 加密 `/img` 與 `/original` URL 中的 source object key |
 | `API_KEY` | 256 | 保護 `/api/*` 管理與工作端點 |
 | `WEBHOOK_SECRET` | 256 | 簽署 webhook callback payload |
 | `KEY_TOKEN_SECRET` | 128 | 簽署加密播放用的 key token |
 | `ENCRYPTION_KEY` | 256 | 包裝並保護資料庫內儲存的 content key |
 
-這五個值目前都要求是十六進位字串。`HMAC_SECRET`、`API_KEY`、`WEBHOOK_SECRET`、`ENCRYPTION_KEY` 建議至少 32 bytes；`KEY_TOKEN_SECRET` 建議至少 16 bytes。
+所有 secret 都使用十六進位字串。`HMAC_SECRET`、`API_KEY`、`WEBHOOK_SECRET`、`ENCRYPTION_KEY` 建議至少 32 bytes；`KEY_TOKEN_SECRET` 建議至少 16 bytes。設定 `IMAGE_SOURCE_KEY` 時必須恰好為 32 bytes（64 個 hex 字元）；留空或不設定則維持明文 source-key URL。
 
 ## Worker、快取與媒體工具鏈
 

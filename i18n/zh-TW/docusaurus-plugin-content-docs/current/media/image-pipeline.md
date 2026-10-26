@@ -9,31 +9,34 @@ Vylux 的圖片處理是同步路徑，主要目標是低延遲與高命中率�
 
 ## 端點
 
-- `/img/:sig/:opts/*`: 即時處理後回傳
-- `/original/:sig/*`: 代理原始物件
+- 啟用 `IMAGE_SOURCE_KEY` 時使用 `/img/:sig/:opts/:source`，否則使用 `/img/:sig/:opts/*`
+- 啟用 `IMAGE_SOURCE_KEY` 時使用 `/original/:sig/:source`，否則使用 `/original/:sig/*`
 - `/thumb/:sig/*`: 代理已產出的圖片資產
 
 ## `/img` 的核心流程
 
-1. 從路徑解析 output format 與 `sourceKey`
+1. 從路徑解析 output format 與 source segment
 2. 解析 `opts`，支援 `w`、`h`、`q`
 3. 驗證 HMAC 簽名
-4. 查記憶體 LRU
-5. 查 media bucket 中的 storage cache
-6. miss 時從 source bucket 讀原圖
-7. 呼叫 libvips 做 resize / encode
-8. 同步寫回 LRU，非同步寫回 storage cache
-9. 回傳圖片 bytes 與 CDN-friendly header
+4. 啟用 `IMAGE_SOURCE_KEY` 時驗證並解密 source token
+5. 查記憶體 LRU
+6. 查 media bucket 中的 storage cache
+7. miss 時從 source bucket 讀原圖
+8. 呼叫 libvips 做 resize / encode
+9. 同步寫回 LRU，非同步寫回 storage cache
+10. 回傳圖片 bytes 與 CDN-friendly header
 
 ## 簽名 canonicalization
 
-Vylux 不直接對 request URL 原字串做 HMAC，而是先 canonicalize：
+明文模式下，Vylux 不直接對 request URL 原字串做 HMAC，而是先 canonicalize：
 
 - `opts` 會整理成固定順序 `w -> h -> q`
 - `encoded_source` 會先 decode 成 object key
 - `jpeg` 會正規化為 `jpg`
 
 這樣 `w300_h200_q80` 與 `h200_w300_q80` 不會造成不同 signature 與不同 cache key。
+
+加密模式則在 `vylux/image-url/v1` domain 中簽署 canonical options、opaque source token 與 canonical format，並在 AES-GCM 解密前驗證簽名。即使同一 source key 有不同 token，解密後仍會使用相同 processing cache key。
 
 ## 快取層次
 

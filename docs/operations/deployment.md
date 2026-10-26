@@ -265,5 +265,5 @@ Also verify:
 ## Anti-patterns
 
 - keeping `all` mode in Kubernetes while trying to scale API and worker independently
-- exposing `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET` to public clients
+- exposing `API_KEY`, `HMAC_SECRET`, `IMAGE_SOURCE_KEY`, or `KEY_TOKEN_SECRET` to public clients
 - giving source and media buckets indistinguishable write permissions when they should represent different trust boundaries
