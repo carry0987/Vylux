@@ -156,6 +156,10 @@ func run(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("encryption key wrapper: %w", err)
 	}
+	imageSourceCipher, err := encryption.NewImageSourceCipher(cfg.ImageSourceKey)
+	if err != nil {
+		return fmt.Errorf("image source cipher: %w", err)
+	}
 
 	redisOpt, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
@@ -182,15 +186,16 @@ func run(cfg *config.Config) error {
 	defer inspector.Close()
 
 	deps := &server.Deps{
-		SourceStore: sourceStore,
-		MediaStore:  mediaStore,
-		Cache:       lru,
-		QueueClient: queueClient,
-		DBQueries:   queries,
-		Inspector:   inspector,
-		Redis:       redisClient,
-		KeyWrapper:  keyWrapper,
-		DBPing:      pool.Ping,
+		SourceStore:       sourceStore,
+		MediaStore:        mediaStore,
+		Cache:             lru,
+		QueueClient:       queueClient,
+		DBQueries:         queries,
+		Inspector:         inspector,
+		Redis:             redisClient,
+		KeyWrapper:        keyWrapper,
+		ImageSourceCipher: imageSourceCipher,
+		DBPing:            pool.Ping,
 		RedisPing: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
 		},

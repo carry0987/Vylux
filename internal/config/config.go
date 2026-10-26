@@ -40,6 +40,7 @@ type Config struct {
 
 	// Secrets
 	HMACSecret     string `env:"HMAC_SECRET,required"`      // Image URL signing
+	ImageSourceKey string `env:"IMAGE_SOURCE_KEY"`          // Optional encrypted image source tokens
 	APIKey         string `env:"API_KEY,required"`          // Internal API authentication
 	WebhookSecret  string `env:"WEBHOOK_SECRET,required"`   // Webhook callback signing
 	KeyTokenSecret string `env:"KEY_TOKEN_SECRET,required"` // AES key token verification
@@ -102,6 +103,13 @@ func (c *Config) Validate() []string {
 	// HMAC_SECRET: expect 64 hex chars (256-bit).
 	if err := validateHexKey(c.HMACSecret, 32, "HMAC_SECRET"); err != "" {
 		errs = append(errs, err)
+	}
+	if c.ImageSourceKey != "" {
+		if len(c.ImageSourceKey) != 64 {
+			errs = append(errs, fmt.Sprintf("IMAGE_SOURCE_KEY must be exactly 64 hex characters, got %d", len(c.ImageSourceKey)))
+		} else if err := validateHexKey(c.ImageSourceKey, 32, "IMAGE_SOURCE_KEY"); err != "" {
+			errs = append(errs, err)
+		}
 	}
 
 	// API_KEY: expect 64 hex chars (256-bit).

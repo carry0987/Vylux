@@ -157,3 +157,82 @@ func TestVerifyOriginalCanonicalization(t *testing.T) {
 		t.Fatal("expected tampered object key to fail verification")
 	}
 }
+
+func TestVerifyEncryptedImage(t *testing.T) {
+	secret := "test-secret"
+	sig, err := SignEncryptedImage(secret, "q80_h200_w300", "opaque-token.jpeg")
+	if err != nil {
+		t.Fatalf("SignEncryptedImage returned error: %v", err)
+	}
+
+	ok, err := VerifyEncryptedImage(secret, sig, "w300_h200_q80", "opaque-token.jpg")
+	if err != nil {
+		t.Fatalf("VerifyEncryptedImage returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected canonical encrypted image signature to verify")
+	}
+
+	for _, sourcePath := range []string{"other-token.jpg", "opaque-token.avif"} {
+		ok, err := VerifyEncryptedImage(secret, sig, "w300_h200_q80", sourcePath)
+		if err != nil {
+			t.Fatalf("VerifyEncryptedImage(%q) returned error: %v", sourcePath, err)
+		}
+		if ok {
+			t.Fatalf("expected modified source path %q to fail verification", sourcePath)
+		}
+	}
+}
+
+func TestEncryptedSignatureDomainsAreSeparated(t *testing.T) {
+	secret := "test-secret"
+	imageSig, err := SignEncryptedImage(secret, "", "opaque-token.webp")
+	if err != nil {
+		t.Fatalf("SignEncryptedImage returned error: %v", err)
+	}
+	originalSig, err := SignEncryptedOriginal(secret, "opaque-token")
+	if err != nil {
+		t.Fatalf("SignEncryptedOriginal returned error: %v", err)
+	}
+	if imageSig == originalSig {
+		t.Fatal("expected image and original signatures to use separate domains")
+	}
+
+	ok, err := VerifyEncryptedOriginal(secret, originalSig, "opaque-token")
+	if err != nil {
+		t.Fatalf("VerifyEncryptedOriginal returned error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected encrypted original signature to verify")
+	}
+	ok, err = VerifyEncryptedOriginal(secret, imageSig, "opaque-token")
+	if err != nil {
+		t.Fatalf("VerifyEncryptedOriginal with image signature returned error: %v", err)
+	}
+	if ok {
+		t.Fatal("expected image signature to fail in original domain")
+	}
+}
+
+func TestEncryptedSignatureCrossLanguageVector(t *testing.T) {
+	const (
+		secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+		token  = "AQABAgMEBQYHCAkKC2Vs1EIpKuLQpkkakR6nAUwBWMoblWBW_FZUJL4KkkRQvPT1Ob-M_IsC7s3mG3OUcg"
+	)
+
+	imageSig, err := SignEncryptedImage(secret, "w671_h278_q90", token+".avif")
+	if err != nil {
+		t.Fatalf("SignEncryptedImage: %v", err)
+	}
+	if want := "a01588e17e4abaeb812697d3b41006dd90d60f44c287c918731ac9e27ffbcb55"; imageSig != want {
+		t.Fatalf("image signature = %q, want %q", imageSig, want)
+	}
+
+	originalSig, err := SignEncryptedOriginal(secret, token)
+	if err != nil {
+		t.Fatalf("SignEncryptedOriginal: %v", err)
+	}
+	if want := "ea4f2676019686704ca7bd20e5b3a801f6f218e4f4c4d2b7bde7978c482c0021"; originalSig != want {
+		t.Fatalf("original signature = %q, want %q", originalSig, want)
+	}
+}

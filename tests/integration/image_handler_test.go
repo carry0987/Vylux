@@ -25,7 +25,7 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
-func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Config, storage.Storage, *dbq.Queries, *cache.LRU, func()) {
+func newS3BackedTestServerWithDeps(t *testing.T, configure ...func(*config.Config)) (*httptest.Server, *config.Config, storage.Storage, *dbq.Queries, *cache.LRU, func()) {
 	t.Helper()
 
 	if testing.Short() {
@@ -64,6 +64,9 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 	}
 
 	cfg := cloneIntegrationConfig()
+	for _, apply := range configure {
+		apply(cfg)
+	}
 
 	keyWrapper, err := encryption.NewKeyWrapper(cfg.EncryptionKey)
 	if err != nil {
@@ -71,6 +74,13 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 		queueClient.Close()
 		release()
 		t.Fatalf("key wrapper: %v", err)
+	}
+	imageSourceCipher, err := encryption.NewImageSourceCipher(cfg.ImageSourceKey)
+	if err != nil {
+		inspector.Close()
+		queueClient.Close()
+		release()
+		t.Fatalf("image source cipher: %v", err)
 	}
 
 	redisOpt, err := redis.ParseURL(integrationEnv.baseConfig.RedisURL)
@@ -83,15 +93,16 @@ func newS3BackedTestServerWithDeps(t *testing.T) (*httptest.Server, *config.Conf
 	redisClient := redis.NewClient(redisOpt)
 
 	deps := &server.Deps{
-		SourceStore: storage.WithInstrumentation(store, "source", "s3"),
-		MediaStore:  storage.WithInstrumentation(store, "media", "s3"),
-		Cache:       lru,
-		QueueClient: queueClient,
-		DBQueries:   queries,
-		Inspector:   inspector,
-		Redis:       redisClient,
-		KeyWrapper:  keyWrapper,
-		DBPing:      integrationEnv.pool.Ping,
+		SourceStore:       storage.WithInstrumentation(store, "source", "s3"),
+		MediaStore:        storage.WithInstrumentation(store, "media", "s3"),
+		Cache:             lru,
+		QueueClient:       queueClient,
+		DBQueries:         queries,
+		Inspector:         inspector,
+		Redis:             redisClient,
+		KeyWrapper:        keyWrapper,
+		ImageSourceCipher: imageSourceCipher,
+		DBPing:            integrationEnv.pool.Ping,
 		RedisPing: func(ctx context.Context) error {
 			return redisClient.Ping(ctx).Err()
 		},
@@ -177,6 +188,106 @@ func TestImageHandler_WithS3CompatibleStorage(t *testing.T) {
 			t.Fatal("expected cached object to be written to media bucket")
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func TestImageHandler_WithEncryptedSourceToken(t *testing.T) {
+	const imageSourceKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	ts, cfg, store, _, lru, cleanup := newS3BackedTestServerWithDeps(t, func(cfg *config.Config) {
+		cfg.ImageSourceKey = imageSourceKey
+	})
+	defer cleanup()
+
+	ctx := context.Background()
+	sourceKey := "private/uploads/recommend cover.png"
+	if err := store.Put(ctx, cfg.SourceBucket, sourceKey, bytes.NewReader(buildTestPNG(t)), "image/png"); err != nil {
+		t.Fatalf("upload source fixture: %v", err)
+	}
+
+	sourceCipher, err := encryption.NewImageSourceCipher(imageSourceKey)
+	if err != nil {
+		t.Fatalf("new image source cipher: %v", err)
+	}
+	token, err := sourceCipher.Encrypt(sourceKey)
+	if err != nil {
+		t.Fatalf("encrypt source key: %v", err)
+	}
+	requestSource := token + ".webp"
+	sig, err := signature.SignEncryptedImage(cfg.HMACSecret, "w64", requestSource)
+	if err != nil {
+		t.Fatalf("sign encrypted image URL: %v", err)
+	}
+	requestURL := ts.URL + "/img/" + sig + "/w64/" + requestSource
+	if strings.Contains(requestURL, "recommend") || strings.Contains(requestURL, "private") {
+		t.Fatalf("encrypted image URL exposed source key: %s", requestURL)
+	}
+
+	resp, err := http.Get(requestURL)
+	if err != nil {
+		t.Fatalf("GET encrypted /img: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "image/webp" {
+		resp.Body.Close()
+		t.Fatalf("expected image/webp content type, got %q", got)
+	}
+	resp.Body.Close()
+	if got := lru.Len(); got != 1 {
+		t.Fatalf("LRU entries after first request = %d, want 1", got)
+	}
+
+	if err := store.Delete(ctx, cfg.SourceBucket, sourceKey); err != nil {
+		t.Fatalf("delete source after cache fill: %v", err)
+	}
+	secondToken, err := sourceCipher.Encrypt(sourceKey)
+	if err != nil {
+		t.Fatalf("encrypt source key again: %v", err)
+	}
+	if secondToken == token {
+		t.Fatal("expected a new nonce to produce a different source token")
+	}
+	secondSource := secondToken + ".webp"
+	secondSig, err := signature.SignEncryptedImage(cfg.HMACSecret, "w64", secondSource)
+	if err != nil {
+		t.Fatalf("sign second encrypted image URL: %v", err)
+	}
+	secondResp, err := http.Get(ts.URL + "/img/" + secondSig + "/w64/" + secondSource)
+	if err != nil {
+		t.Fatalf("GET second encrypted /img: %v", err)
+	}
+	defer secondResp.Body.Close()
+	if secondResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected cached second request to return 200, got %d", secondResp.StatusCode)
+	}
+	if got := lru.Len(); got != 1 {
+		t.Fatalf("LRU entries after second token = %d, want 1", got)
+	}
+}
+
+func TestImageHandler_EncryptedModeRejectsPlaintextSource(t *testing.T) {
+	const imageSourceKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+	ts, cfg, _, _, _, cleanup := newS3BackedTestServerWithDeps(t, func(cfg *config.Config) {
+		cfg.ImageSourceKey = imageSourceKey
+	})
+	defer cleanup()
+
+	requestSource := "plain-image.png.webp"
+	sig, err := signature.SignEncryptedImage(cfg.HMACSecret, "w64", requestSource)
+	if err != nil {
+		t.Fatalf("sign plaintext-looking encrypted image URL: %v", err)
+	}
+	resp, err := http.Get(ts.URL + "/img/" + sig + "/w64/" + requestSource)
+	if err != nil {
+		t.Fatalf("GET plaintext source in encrypted mode: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
 	}
 }
 

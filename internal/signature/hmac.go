@@ -173,6 +173,68 @@ func VerifyImage(secret, sig, rawOptions, rawSourcePath string) (bool, error) {
 	return hmac.Equal([]byte(expected), []byte(sig)), nil
 }
 
+func canonicalizeEncryptedImageSourcePath(raw string) (token, format string, err error) {
+	raw = strings.TrimPrefix(raw, "/")
+	if raw == "" {
+		return "", "", fmt.Errorf("missing source token")
+	}
+
+	ext := path.Ext(raw)
+	if ext == "" {
+		return "", "", fmt.Errorf("missing output format")
+	}
+
+	token = strings.TrimSuffix(raw, ext)
+	if token == "" {
+		return "", "", fmt.Errorf("missing source token")
+	}
+	format = strings.ToLower(strings.TrimPrefix(ext, "."))
+	if format == "jpeg" {
+		format = "jpg"
+	}
+	if format == "" {
+		return "", "", fmt.Errorf("missing output format")
+	}
+
+	return token, format, nil
+}
+
+func signDomain(secret, domain string, parts ...string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(domain))
+	for _, part := range parts {
+		mac.Write([]byte{0})
+		mac.Write([]byte(part))
+	}
+
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// SignEncryptedImage signs canonical image options, an opaque source token,
+// and the output format as separate protocol fields.
+func SignEncryptedImage(secret, rawOptions, rawSourcePath string) (string, error) {
+	canonicalOptions, err := CanonicalizeImageOptions(rawOptions)
+	if err != nil {
+		return "", err
+	}
+	token, format, err := canonicalizeEncryptedImageSourcePath(rawSourcePath)
+	if err != nil {
+		return "", err
+	}
+
+	return signDomain(secret, "vylux/image-url/v1", canonicalOptions, token, format), nil
+}
+
+// VerifyEncryptedImage verifies an encrypted-source image URL signature.
+func VerifyEncryptedImage(secret, sig, rawOptions, rawSourcePath string) (bool, error) {
+	expected, err := SignEncryptedImage(secret, rawOptions, rawSourcePath)
+	if err != nil {
+		return false, err
+	}
+
+	return hmac.Equal([]byte(expected), []byte(sig)), nil
+}
+
 // SignOriginal canonicalizes an original object key before computing the signature.
 func SignOriginal(secret, rawObjectKey string) (string, error) {
 	canonicalKey, err := CanonicalizeObjectKey(rawObjectKey)
@@ -186,6 +248,25 @@ func SignOriginal(secret, rawObjectKey string) (string, error) {
 // VerifyOriginal canonicalizes an original object key before comparing signatures.
 func VerifyOriginal(secret, sig, rawObjectKey string) (bool, error) {
 	expected, err := SignOriginal(secret, rawObjectKey)
+	if err != nil {
+		return false, err
+	}
+
+	return hmac.Equal([]byte(expected), []byte(sig)), nil
+}
+
+// SignEncryptedOriginal signs an opaque source token for original delivery.
+func SignEncryptedOriginal(secret, sourceToken string) (string, error) {
+	if sourceToken == "" || strings.Contains(sourceToken, "/") {
+		return "", fmt.Errorf("invalid source token")
+	}
+
+	return signDomain(secret, "vylux/original-url/v1", sourceToken), nil
+}
+
+// VerifyEncryptedOriginal verifies an encrypted-source original URL signature.
+func VerifyEncryptedOriginal(secret, sig, sourceToken string) (bool, error) {
+	expected, err := SignEncryptedOriginal(secret, sourceToken)
 	if err != nil {
 		return false, err
 	}
