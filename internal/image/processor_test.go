@@ -2,8 +2,10 @@ package image
 
 import (
 	"bytes"
+	"errors"
 	stdimage "image"
 	"image/color"
+	"image/gif"
 	"image/png"
 	"os"
 	"testing"
@@ -23,7 +25,7 @@ func TestProcessPNGToAVIF(t *testing.T) {
 	requireHEIFSupport(t)
 
 	src := buildTestPNG(t)
-	out, err := Process(src, Options{Format: FormatAVIF})
+	out, err := Process(src, Options{Format: FormatAVIF}, defaultTestLimits())
 	if err != nil {
 		t.Fatalf("Process PNG -> AVIF: %v", err)
 	}
@@ -36,7 +38,7 @@ func TestProcessAVIFInputToWebP(t *testing.T) {
 	requireHEIFSupport(t)
 
 	src := encodeHEIFBuffer(t, buildTestPNG(t), vips.HeifCompressionAv1)
-	out, err := Process(src, Options{Format: FormatWebP})
+	out, err := Process(src, Options{Format: FormatWebP}, defaultTestLimits())
 	if err != nil {
 		t.Fatalf("Process AVIF -> WebP: %v", err)
 	}
@@ -49,12 +51,31 @@ func TestProcessHEICInputToWebP(t *testing.T) {
 	requireHEIFSupport(t)
 
 	src := encodeHEIFBuffer(t, buildTestPNG(t), vips.HeifCompressionHevc)
-	out, err := Process(src, Options{Format: FormatWebP})
+	out, err := Process(src, Options{Format: FormatWebP}, defaultTestLimits())
 	if err != nil {
 		t.Fatalf("Process HEIC -> WebP: %v", err)
 	}
 
 	assertDecodableImage(t, out, 2, 2)
+}
+
+func TestProcess_RejectsAnimatedImageAboveConfiguredFrameLimit(t *testing.T) {
+	limits := Limits{MaxAnimationFrames: 1}
+	_, err := Process(buildTestGIF(t), Options{Format: FormatGIF}, limits)
+	if !errors.Is(err, ErrDecodeImage) {
+		t.Fatalf("Process animated GIF = %v, want decode error", err)
+	}
+}
+
+func TestProcess_RejectsInvalidLimits(t *testing.T) {
+	_, err := Process(buildTestPNG(t), Options{Format: FormatWebP}, Limits{})
+	if !errors.Is(err, ErrInvalidLimits) {
+		t.Fatalf("Process with invalid limits = %v, want invalid limits error", err)
+	}
+}
+
+func defaultTestLimits() Limits {
+	return Limits{MaxAnimationFrames: 1}
 }
 
 func buildTestPNG(t *testing.T) []byte {
@@ -69,6 +90,27 @@ func buildTestPNG(t *testing.T) []byte {
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, img); err != nil {
 		t.Fatalf("encode test png: %v", err)
+	}
+
+	return buf.Bytes()
+}
+
+func buildTestGIF(t *testing.T) []byte {
+	t.Helper()
+
+	palette := color.Palette{
+		color.Black,
+		color.White,
+	}
+	frame := stdimage.NewPaletted(stdimage.Rect(0, 0, 1, 1), palette)
+	frame.SetColorIndex(0, 0, 1)
+
+	var buf bytes.Buffer
+	if err := gif.EncodeAll(&buf, &gif.GIF{
+		Image: []*stdimage.Paletted{frame, frame},
+		Delay: []int{1, 1},
+	}); err != nil {
+		t.Fatalf("encode test GIF: %v", err)
 	}
 
 	return buf.Bytes()

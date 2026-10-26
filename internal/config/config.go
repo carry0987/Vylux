@@ -11,6 +11,8 @@ import (
 	redis "github.com/redis/go-redis/v9"
 )
 
+const DefaultMaxAnimationFrames = 1000
+
 // Config holds all configuration for Vylux, populated from environment variables.
 type Config struct {
 	// Server
@@ -54,7 +56,8 @@ type Config struct {
 	MaxFileSize            int64 `env:"MAX_FILE_SIZE" envDefault:"53687091200"`       // 50GB
 
 	// Cache
-	CacheMaxSize int64 `env:"CACHE_MAX_SIZE" envDefault:"1073741824"` // 1GB LRU
+	CacheMaxSize       int64 `env:"CACHE_MAX_SIZE" envDefault:"1073741824"` // 1GB LRU
+	MaxAnimationFrames int   `env:"MAX_ANIMATION_FRAMES" envDefault:"1000"`
 
 	// FFmpeg
 	FFmpegPath        string `env:"FFMPEG_PATH" envDefault:"ffmpeg"`
@@ -180,6 +183,10 @@ func (c *Config) Validate() []string {
 
 	if c.MaxFileSize < 1 {
 		errs = append(errs, "MAX_FILE_SIZE must be at least 1")
+	}
+
+	if c.MaxAnimationFrames < 1 {
+		errs = append(errs, "MAX_ANIMATION_FRAMES must be at least 1")
 	}
 
 	if c.LargeFileThreshold > c.MaxFileSize {

@@ -93,7 +93,8 @@ func HandleImageThumbnail(d *Deps) func(context.Context, *asynq.Task) error {
 			)
 
 			_ = variantCtx
-			processed, err := image.Process(src, opts)
+			limits := image.Limits{MaxAnimationFrames: d.Config.MaxAnimationFrames}
+			processed, err := image.Process(src, opts, limits)
 			if err != nil {
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())

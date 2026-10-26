@@ -13,6 +13,7 @@ import (
 	"Vylux/internal/db/dbq"
 	"Vylux/internal/encryption"
 	"Vylux/internal/handler"
+	"Vylux/internal/image"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/queue"
 	"Vylux/internal/storage"
@@ -109,6 +110,7 @@ func (s *Server) registerRoutes() {
 		s.deps.Cache,
 		s.deps.DBQueries,
 		s.deps.ImageSourceCipher,
+		image.Limits{MaxAnimationFrames: s.cfg.MaxAnimationFrames},
 		s.cfg.SourceBucket,
 		s.cfg.MediaBucket,
 		s.cfg.HMACSecret,

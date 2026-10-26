@@ -13,10 +13,13 @@ var (
 	ErrDecodeImage      = errors.New("decode image")
 	ErrEncodeImage      = errors.New("encode image")
 	ErrAnimatedToStatic = errors.New("animated image cannot be converted to static format (use webp or gif output)")
+	ErrInvalidLimits    = errors.New("invalid image processing limits")
 )
 
-// MaxAnimationFrames is the safety limit on number of frames in an animated image.
-const MaxAnimationFrames = 200
+// Limits defines server-side resource limits for image processing.
+type Limits struct {
+	MaxAnimationFrames int
+}
 
 // inputSupportsAnimation checks whether the raw image bytes are GIF or WebP
 // by inspecting magic bytes. Only these formats can carry multiple frames.
@@ -47,7 +50,11 @@ func Shutdown() {
 // For animated images, ThumbnailBuffer with Crop breaks the frame stack,
 // so when both width and height are specified we use ThumbnailBuffer for
 // cover-scaling then ExtractAreaMultiPage for per-frame center crop.
-func Process(src []byte, opts Options) ([]byte, error) {
+func Process(src []byte, opts Options, limits Limits) ([]byte, error) {
+	if limits.MaxAnimationFrames < 1 {
+		return nil, fmt.Errorf("%w: max animation frames must be at least 1", ErrInvalidLimits)
+	}
+
 	var img *vips.Image
 	var err error
 
@@ -93,9 +100,9 @@ func Process(src []byte, opts Options) ([]byte, error) {
 	}
 
 	// Safety limit: reject images with too many frames.
-	if img.Pages() > MaxAnimationFrames {
+	if img.Pages() > limits.MaxAnimationFrames {
 		return nil, fmt.Errorf("%w: animated image exceeds frame limit (%d > %d)",
-			ErrDecodeImage, img.Pages(), MaxAnimationFrames)
+			ErrDecodeImage, img.Pages(), limits.MaxAnimationFrames)
 	}
 
 	// Export to target format
