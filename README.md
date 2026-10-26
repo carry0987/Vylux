@@ -65,7 +65,7 @@ MEDIA_BUCKET=media-bucket
 
 When source and media share the same S3-compatible backend, repeat the endpoint and credential values explicitly for both roles. Vylux does not support implicit fallback from `SOURCE_*` to `MEDIA_*`.
 
-Generate the five common secrets and append them to `.env`:
+Generate the five required secrets and an optional image-source encryption key, then append them to `.env`:
 
 ```bash
 cat >> .env <<EOF
@@ -74,7 +74,54 @@ API_KEY=$(openssl rand -hex 32)
 WEBHOOK_SECRET=$(openssl rand -hex 32)
 KEY_TOKEN_SECRET=$(openssl rand -hex 16)
 ENCRYPTION_KEY=$(openssl rand -hex 32)
+IMAGE_SOURCE_KEY=$(openssl rand -hex 32)
 EOF
+```
+
+`IMAGE_SOURCE_KEY` enables AES-256-GCM source tokens for `/img` and `/original`. Configure the same key in the trusted application that generates signed image URLs. Leave it empty to retain plaintext source-key URLs.
+
+### Encrypted image source protocol
+
+When `IMAGE_SOURCE_KEY` is set, encode the exact UTF-8 source object key as:
+
+```text
+token_bytes = 0x01 || nonce || AES-256-GCM(source_key, nonce, aad)
+nonce       = 12 cryptographically random bytes
+aad         = "vylux/image-source/v1"
+token       = unpadded Base64URL(token_bytes)
+```
+
+The AES-GCM result includes its 16-byte authentication tag. Never reuse, fix, or derive the nonce from the source key. Store and reuse the generated token when stable CDN URLs are required.
+
+Encrypted-source URLs use these forms:
+
+```text
+/img/{signature}/{options}/{token}.{format}
+/original/{signature}/{token}
+```
+
+Sign with the existing `HMAC_SECRET` value as UTF-8 bytes. Each `\x00` below is one NUL byte:
+
+```text
+image input = "vylux/image-url/v1" || "\x00" || canonical_options ||
+			  "\x00" || token || "\x00" || canonical_format
+
+original input = "vylux/original-url/v1" || "\x00" || token
+```
+
+Use the full HMAC-SHA256 digest encoded as lowercase hex. The fixed interoperability vector is:
+
+```text
+IMAGE_SOURCE_KEY = 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+nonce            = 000102030405060708090a0b
+source_key       = static/forum/recommend-cover.png
+token            = AQABAgMEBQYHCAkKC2Vs1EIpKuLQpkkakR6nAUwBWMoblWBW_FZUJL4KkkRQvPT1Ob-M_IsC7s3mG3OUcg
+
+HMAC_SECRET      = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+options          = w671_h278_q90
+format           = avif
+image_signature  = a01588e17e4abaeb812697d3b41006dd90d60f44c287c918731ac9e27ffbcb55
+original_signature = ea4f2676019686704ca7bd20e5b3a801f6f218e4f4c4d2b7bde7978c482c0021
 ```
 
 Then run Vylux:

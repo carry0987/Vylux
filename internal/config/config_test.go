@@ -73,6 +73,41 @@ func TestValidate_WorkerAndScratchSettings(t *testing.T) {
 	}
 }
 
+func TestValidate_ImageSourceKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		key         string
+		wantErrPart string
+	}{
+		{name: "disabled"},
+		{name: "valid", key: strings.Repeat("f", 64)},
+		{name: "invalid hex", key: strings.Repeat("z", 64), wantErrPart: "IMAGE_SOURCE_KEY is not valid hex"},
+		{name: "invalid length", key: strings.Repeat("f", 62), wantErrPart: "IMAGE_SOURCE_KEY must be exactly 64 hex characters"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := validConfig()
+			cfg.ImageSourceKey = tt.key
+
+			errs := cfg.Validate()
+			if tt.wantErrPart == "" {
+				if len(errs) != 0 {
+					t.Fatalf("expected no validation errors, got %v", errs)
+				}
+				return
+			}
+			for _, err := range errs {
+				if strings.Contains(err, tt.wantErrPart) {
+					return
+				}
+			}
+
+			t.Fatalf("expected validation error containing %q, got %v", tt.wantErrPart, errs)
+		})
+	}
+}
+
 func TestValidate_URLSettings(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -28,16 +28,17 @@ import (
 
 // Deps holds shared dependencies that the HTTP server needs.
 type Deps struct {
-	SourceStore storage.Storage
-	MediaStore  storage.Storage
-	Cache       *cache.LRU
-	QueueClient *queue.Client
-	DBQueries   *dbq.Queries
-	Inspector   *asynq.Inspector
-	Redis       *redis.Client
-	KeyWrapper  *encryption.KeyWrapper
-	DBPing      func(context.Context) error
-	RedisPing   func(context.Context) error
+	SourceStore       storage.Storage
+	MediaStore        storage.Storage
+	Cache             *cache.LRU
+	QueueClient       *queue.Client
+	DBQueries         *dbq.Queries
+	Inspector         *asynq.Inspector
+	Redis             *redis.Client
+	KeyWrapper        *encryption.KeyWrapper
+	ImageSourceCipher *encryption.ImageSourceCipher
+	DBPing            func(context.Context) error
+	RedisPing         func(context.Context) error
 }
 
 // Server wraps the Echo instance and configuration.
@@ -107,21 +108,24 @@ func (s *Server) registerRoutes() {
 		s.deps.MediaStore,
 		s.deps.Cache,
 		s.deps.DBQueries,
+		s.deps.ImageSourceCipher,
 		s.cfg.SourceBucket,
 		s.cfg.MediaBucket,
 		s.cfg.HMACSecret,
 	)
 	originalHandler := handler.NewOriginalHandler(
 		s.deps.SourceStore,
+		s.deps.ImageSourceCipher,
 		s.cfg.SourceBucket,
 		s.cfg.HMACSecret,
 	)
-	s.echo.GET("/img/:sig/:opts/*", imgHandler.Handle,
-		custommw.CacheHeaders(true),
-	)
-	s.echo.GET("/original/:sig/*", originalHandler.Handle,
-		custommw.CacheHeaders(true),
-	)
+	if s.deps.ImageSourceCipher.Enabled() {
+		s.echo.GET("/img/:sig/:opts/:source", imgHandler.Handle, custommw.CacheHeaders(true))
+		s.echo.GET("/original/:sig/:source", originalHandler.Handle, custommw.CacheHeaders(true))
+	} else {
+		s.echo.GET("/img/:sig/:opts/*", imgHandler.Handle, custommw.CacheHeaders(true))
+		s.echo.GET("/original/:sig/*", originalHandler.Handle, custommw.CacheHeaders(true))
+	}
 
 	// ── Thumbnail / cover serving (HMAC verified in handler, CDN cache headers) ──
 	thumbHandler := handler.NewThumbHandler(

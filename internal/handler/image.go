@@ -17,6 +17,7 @@ import (
 
 	"Vylux/internal/cache"
 	"Vylux/internal/db/dbq"
+	"Vylux/internal/encryption"
 	"Vylux/internal/image"
 	appmetrics "Vylux/internal/metrics"
 	"Vylux/internal/signature"
@@ -41,6 +42,7 @@ type ImageHandler struct {
 	sourceBucket string
 	mediaBucket  string
 	hmacSecret   string
+	sourceCipher *encryption.ImageSourceCipher
 
 	sourceFlight  singleflight.Group
 	processFlight singleflight.Group
@@ -52,6 +54,7 @@ func NewImageHandler(
 	mediaStore storage.Storage,
 	lru *cache.LRU,
 	queries *dbq.Queries,
+	sourceCipher *encryption.ImageSourceCipher,
 	sourceBucket, mediaBucket, hmacSecret string,
 ) *ImageHandler {
 	return &ImageHandler{
@@ -59,6 +62,7 @@ func NewImageHandler(
 		mediaStore:   mediaStore,
 		cache:        lru,
 		queries:      queries,
+		sourceCipher: sourceCipher,
 		sourceBucket: sourceBucket,
 		mediaBucket:  mediaBucket,
 		hmacSecret:   hmacSecret,
@@ -74,10 +78,12 @@ func NewImageHandler(
 func (h *ImageHandler) Handle(c *echo.Context) error {
 	sig := c.Param("sig")
 	optsRaw := c.Param("opts")
-	sourcePath := c.Param("*") // everything after /img/:sig/:opts/
-
-	// Strip leading slash if Echo adds one.
-	sourcePath = strings.TrimPrefix(sourcePath, "/")
+	sourcePath := c.Param("*")
+	if h.sourceCipher.Enabled() {
+		sourcePath = c.Param("source")
+	} else {
+		sourcePath = strings.TrimPrefix(sourcePath, "/")
+	}
 	if sourcePath == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "missing source path")
 	}
@@ -90,13 +96,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "unsupported output format")
 	}
 
-	// The actual S3 key is the source path without the output format extension,
-	// then URL-decoded if the client percent-encoded any reserved characters.
 	encodedSource := strings.TrimSuffix(sourcePath, ext)
-	sourceKey, err := url.PathUnescape(encodedSource)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid source encoding")
-	}
 
 	// ── 1. Parse processing options ──
 	opts, err := image.ParseOptions(optsRaw)
@@ -105,14 +105,33 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 	}
 	opts.Format = format
 
-	// ── 2. Verify HMAC signature against canonicalized request components ──
-	ok, err := signature.VerifyImage(h.hmacSecret, sig, optsRaw, sourcePath)
+	// ── 2. Verify HMAC signature, then resolve the source object key ──
+	var ok bool
+	if h.sourceCipher.Enabled() {
+		ok, err = signature.VerifyEncryptedImage(h.hmacSecret, sig, optsRaw, sourcePath)
+	} else {
+		ok, err = signature.VerifyImage(h.hmacSecret, sig, optsRaw, sourcePath)
+	}
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 	if !ok {
 		return echo.NewHTTPError(http.StatusForbidden, "invalid signature")
 	}
+
+	var sourceKey string
+	if h.sourceCipher.Enabled() {
+		sourceKey, err = h.sourceCipher.Decrypt(encodedSource)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusForbidden, "invalid source token")
+		}
+	} else {
+		sourceKey, err = url.PathUnescape(encodedSource)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "invalid source encoding")
+		}
+	}
+	sourceID := sourceFingerprint(sourceKey)
 
 	// ── 3. Cache lookup ──
 	cacheKey := processingHash(sourceKey, opts)
@@ -145,7 +164,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 			trace.WithAttributes(
 				attribute.String("storage.role", "source"),
 				attribute.String("storage.bucket", h.sourceBucket),
-				attribute.String("media.hash", sourceKey),
+				attribute.String("source.fingerprint", sourceID),
 			),
 		)
 		defer span.End()
@@ -167,7 +186,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 		}
 		appmetrics.ObserveImageError("source_fetch", status)
 		appmetrics.ObserveImageResult("error")
-		slog.Warn("source fetch failed", apptracing.LogFields(c.Request().Context(), "key", sourceKey, "status", status, "error", err)...)
+		slog.Warn("source fetch failed", apptracing.LogFields(c.Request().Context(), "source_fingerprint", sourceID, "status", status, "error", err)...)
 		return echo.NewHTTPError(status, message)
 	}
 	raw := rawVal.([]byte)
@@ -204,7 +223,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 		}
 		appmetrics.ObserveImageError("process", status)
 		appmetrics.ObserveImageResult("error")
-		slog.Warn("image processing failed", apptracing.LogFields(c.Request().Context(), "key", sourceKey, "opts", optsRaw, "status", status, "error", err)...)
+		slog.Warn("image processing failed", apptracing.LogFields(c.Request().Context(), "source_fingerprint", sourceID, "opts", optsRaw, "status", status, "error", err)...)
 		return echo.NewHTTPError(status, message)
 	}
 	result := resultVal.([]byte)
@@ -301,5 +320,10 @@ func (h *ImageHandler) trackCacheEntry(ctx context.Context, sourceKey, cacheKey,
 // shortHash returns the first 16 hex chars of a SHA-256 over data (for ETags).
 func shortHash(data []byte) string {
 	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:8])
+}
+
+func sourceFingerprint(sourceKey string) string {
+	h := sha256.Sum256([]byte(sourceKey))
 	return hex.EncodeToString(h[:8])
 }
