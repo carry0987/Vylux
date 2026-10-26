@@ -148,6 +148,7 @@ head -c 16 /dev/urandom | xxd -p -c 32
 | `LARGE_FILE_THRESHOLD` | 否 | `5368709120` | 大檔任務切到低優先度 queue 的門檻，單位 bytes |
 | `MAX_FILE_SIZE` | 否 | `53687091200` | 可接受的最大來源檔案大小，單位 bytes |
 | `CACHE_MAX_SIZE` | 否 | `1073741824` | 記憶體 LRU 圖片快取上限，單位 bytes |
+| `MAX_ANIMATION_FRAMES` | 否 | `1000` | 動態 GIF 或 WebP 圖片可接受的最大總幀數 |
 | `FFMPEG_PATH` | 否 | `ffmpeg` | FFmpeg binary 路徑 |
 | `FFPROBE_PATH` | 否 | `ffprobe` | FFprobe binary 路徑 |
 | `SHAKA_PACKAGER_PATH` | 否 | `packager` | Shaka Packager binary 路徑 |
@@ -182,6 +183,7 @@ head -c 16 /dev/urandom | xxd -p -c 32
 - `LARGE_WORKER_CONCURRENCY` 必須至少為 `1`
 - `LARGE_FILE_THRESHOLD` 必須至少為 `1`
 - `MAX_FILE_SIZE` 必須至少為 `1`
+- `MAX_ANIMATION_FRAMES` 必須至少為 `1`
 - `LARGE_FILE_THRESHOLD` 必須小於或等於 `MAX_FILE_SIZE`
 - `BASE_URL` 不得以 `/` 結尾
 - `DATABASE_URL` 若不是 `postgres://...` 或 `postgresql://...`，啟動時就會被拒絕

@@ -148,6 +148,7 @@ All secret values are expected to be hex strings. `HMAC_SECRET`, `API_KEY`, `WEB
 | `LARGE_FILE_THRESHOLD` | no | `5368709120` | bytes threshold for routing large tasks to the lower-priority queue |
 | `MAX_FILE_SIZE` | no | `53687091200` | maximum accepted source size in bytes |
 | `CACHE_MAX_SIZE` | no | `1073741824` | in-memory LRU image-cache limit in bytes |
+| `MAX_ANIMATION_FRAMES` | no | `1000` | maximum number of frames accepted in an animated GIF or WebP image |
 | `FFMPEG_PATH` | no | `ffmpeg` | FFmpeg binary path |
 | `FFPROBE_PATH` | no | `ffprobe` | FFprobe binary path |
 | `SHAKA_PACKAGER_PATH` | no | `packager` | Shaka Packager binary path |
@@ -182,6 +183,7 @@ The following values are not consumed directly by the Vylux binary but are used 
 - `LARGE_WORKER_CONCURRENCY` must be at least `1`
 - `LARGE_FILE_THRESHOLD` must be at least `1`
 - `MAX_FILE_SIZE` must be at least `1`
+- `MAX_ANIMATION_FRAMES` must be at least `1`
 - `LARGE_FILE_THRESHOLD` must be less than or equal to `MAX_FILE_SIZE`
 - `BASE_URL` must not end with `/`
 - `IMAGE_SOURCE_KEY`, when set, must contain exactly 64 valid hex characters
