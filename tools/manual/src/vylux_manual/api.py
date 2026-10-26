@@ -6,7 +6,15 @@ from typing import Any
 from urllib import error, parse, request
 
 from .env import Settings
-from .signing import generate_key_token, sign_image, sign_original, sign_thumb
+from .signing import (
+    create_image_source_token,
+    generate_key_token,
+    sign_encrypted_image,
+    sign_encrypted_original,
+    sign_image,
+    sign_original,
+    sign_thumb,
+)
 
 
 @dataclass
@@ -130,12 +138,30 @@ class VyluxAPI:
     def ready(self) -> Response:
         return self._request("GET", "/readyz")
 
-    def build_image_url(self, *, options: str, source_key: str, output_format: str) -> str:
+    def build_source_token(self, *, source_key: str, nonce: bytes | None = None) -> str:
+        if not self.settings.image_source_key:
+            raise ValueError("IMAGE_SOURCE_KEY is not configured")
+        return create_image_source_token(source_key, self.settings.image_source_key, nonce)
+
+    def build_image_url(self, *, options: str, source_key: str, output_format: str, source_token: str | None = None, nonce: bytes | None = None) -> str:
+        if self.settings.image_source_key:
+            token = source_token or self.build_source_token(source_key=source_key, nonce=nonce)
+            signature, canonical_options, canonical_format = sign_encrypted_image(self.settings.hmac_secret, options, token, output_format)
+            source_path = f"{token}.{canonical_format}"
+            return f"{self.settings.base_url.rstrip('/')}/img/{signature}/{canonical_options}/{source_path}"
+        if source_token is not None or nonce is not None:
+            raise ValueError("--token and --nonce require IMAGE_SOURCE_KEY")
         source_path = parse.quote(source_key, safe="") + f".{output_format}"
         signature, canonical_options, _ = sign_image(self.settings.hmac_secret, options, source_path)
         return f"{self.settings.base_url.rstrip('/')}/img/{signature}/{canonical_options}/{source_path}"
 
-    def build_original_url(self, *, source_key: str) -> str:
+    def build_original_url(self, *, source_key: str, source_token: str | None = None, nonce: bytes | None = None) -> str:
+        if self.settings.image_source_key:
+            token = source_token or self.build_source_token(source_key=source_key, nonce=nonce)
+            signature = sign_encrypted_original(self.settings.hmac_secret, token)
+            return f"{self.settings.base_url.rstrip('/')}/original/{signature}/{token}"
+        if source_token is not None or nonce is not None:
+            raise ValueError("--token and --nonce require IMAGE_SOURCE_KEY")
         encoded_key = parse.quote(source_key, safe="")
         signature, _ = sign_original(self.settings.hmac_secret, encoded_key)
         return f"{self.settings.base_url.rstrip('/')}/original/{signature}/{encoded_key}"

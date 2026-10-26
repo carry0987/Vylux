@@ -18,6 +18,7 @@ tools/manual/
 ## 先決條件
 
 - Python 3.11+
+- 工具會自動安裝 `cryptography`，用於 AES-GCM source token
 - 若要操作 RustFS object，需安裝 `boto3`
 - 準備好可用的 `.env`，必要時再加 `.env.local`
 
@@ -91,6 +92,7 @@ python -m vylux_manual --help
 - retry failed job
 - 依 content hash 刪除衍生媒體
 - 產生已簽名的 `/img`、`/original`、`/thumb` URL
+- 設定 `IMAGE_SOURCE_KEY` 時產生可重用的 AES-GCM source token
 - 產生 `/api/key/{id}` 的 URL 與 Bearer token
 
 ## 常見流程
@@ -177,10 +179,28 @@ python -m pip uninstall vylux-manual
 vylux-manual image-url uploads/sample.png webp --options w320_h180
 ```
 
+`.env` 或 `.env.local` 有 `IMAGE_SOURCE_KEY` 時，此命令會自動加密 source key；未設定時維持明文 URL。
+
+分開生成並保存 token：
+
+```bash showLineNumbers
+vylux-manual source-token uploads/sample.png
+vylux-manual image-url uploads/sample.png webp --options w320_h180 --token '<saved-token>'
+```
+
+重現固定測試向量：
+
+```bash showLineNumbers
+vylux-manual source-token static/forum/recommend-cover.png \
+	--nonce 000102030405060708090a0b
+```
+
+`--nonce` 只供測試向量使用；一般操作請省略，讓工具生成安全的隨機 nonce。
+
 ### 已簽名原檔 URL
 
 ```bash showLineNumbers
-vylux-manual original-url uploads/sample.png
+vylux-manual original-url uploads/sample.png --token '<saved-token>'
 ```
 
 ### 已簽名縮圖 URL
@@ -197,7 +217,7 @@ vylux-manual key-url <key-id> <content-hash> --ttl 3600
 
 ## 安全提醒
 
-- 不要把 `API_KEY`、`HMAC_SECRET`、`KEY_TOKEN_SECRET` 暴露到瀏覽器
+- 不要把 `API_KEY`、`HMAC_SECRET`、`IMAGE_SOURCE_KEY`、`KEY_TOKEN_SECRET` 暴露到瀏覽器
 - 請把這套工具視為可信任的本機 helper，而不是公開 client
 - 若你會分享 shell history 或截圖，記得其中可能會帶到敏感值
 

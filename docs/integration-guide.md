@@ -44,6 +44,7 @@ That separation is intentional. Vylux owns media processing and media delivery s
 | --- | --- | --- |
 | `API_KEY` | internal `/api/*` management endpoints such as `/api/audio/jobs`, `/api/video/jobs`, and `/api/jobs/{id}` | your backend or internal tooling only |
 | `HMAC_SECRET` | signing `/img`, `/original`, and `/thumb` URLs | your backend or auth/signing service only |
+| `IMAGE_SOURCE_KEY` | optional encryption of source object keys in `/img` and `/original` URLs | the same trusted backend that signs those URLs |
 | `KEY_TOKEN_SECRET` | signing Bearer tokens for `/api/key/{id}` | your backend or auth/signing service only |
 
 Do not expose any of these values to browsers, mobile apps, or other public clients.
@@ -52,8 +53,8 @@ Do not expose any of these values to browsers, mobile apps, or other public clie
 
 | Use case | Endpoint shape | Notes |
 | --- | --- | --- |
-| dynamically resize or reformat a source image | `/img/{sig}/{opts}/{encoded_source}.{format}` | signed with `HMAC_SECRET` |
-| allow controlled download or display of the original source file | `/original/{sig}/{encoded_key}` | signed with `HMAC_SECRET` |
+| dynamically resize or reformat a source image | `/img/{sig}/{opts}/{source}.{format}` | signed with `HMAC_SECRET`; `source` is encrypted when `IMAGE_SOURCE_KEY` is set |
+| allow controlled download or display of the original source file | `/original/{sig}/{source}` | uses the same optional encrypted source token |
 | expose an already-generated thumbnail, cover, preview, or other media-bucket image asset | `/thumb/{sig}/{encoded_key}` | signed with `HMAC_SECRET` using the `thumb/` signing domain |
 | play HLS output | `/stream/{hash}/master.m3u8` | no auth header on playlist and segment requests |
 | fetch an encrypted content key during playback | `/api/key/{id}` with `Authorization: Bearer {token}` | token signed with `KEY_TOKEN_SECRET` |
@@ -86,8 +87,9 @@ Your application stores a source object key such as `uploads/avatars/sample.jpg`
 Flow:
 
 1. your app chooses output options such as `w640_h360_q80` and `webp`
-2. your app signs the canonical payload with `HMAC_SECRET`
-3. your app returns the final `/img/...` URL to the browser or CDN
+2. when `IMAGE_SOURCE_KEY` is configured, your app creates or loads the stored encrypted source token
+3. your app signs the canonical payload with `HMAC_SECRET`
+4. your app returns the final `/img/...` URL to the browser or CDN
 
 Read next:
 
@@ -140,7 +142,8 @@ Before calling your integration complete, verify all of the following:
 
 - your backend can create audio and video jobs with `X-API-Key`
 - your backend can sign `/img`, `/original`, and `/thumb` URLs with `HMAC_SECRET`
-- your frontend never sees `API_KEY`, `HMAC_SECRET`, or `KEY_TOKEN_SECRET`
+- your backend can reproduce the encrypted source token test vector when `IMAGE_SOURCE_KEY` is enabled
+- your frontend never sees `API_KEY`, `HMAC_SECRET`, `IMAGE_SOURCE_KEY`, or `KEY_TOKEN_SECRET`
 - your player uses `/stream/{hash}/master.m3u8` as the public HLS entrypoint
 - encrypted playback only sends `Authorization` headers to `/api/key/{id}`
 

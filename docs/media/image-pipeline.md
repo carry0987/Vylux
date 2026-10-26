@@ -9,31 +9,34 @@ Vylux handles images on a synchronous request path optimized for low latency and
 
 ## Endpoints
 
-- `/img/:sig/:opts/*`: transform and return an image immediately
-- `/original/:sig/*`: proxy the original object
+- `/img/:sig/:opts/:source` with `IMAGE_SOURCE_KEY`, otherwise `/img/:sig/:opts/*`: transform and return an image immediately
+- `/original/:sig/:source` with `IMAGE_SOURCE_KEY`, otherwise `/original/:sig/*`: proxy the original object
 - `/thumb/:sig/*`: proxy generated image assets
 
 ## `/img` core flow
 
-1. parse the output format and source key from the request path
+1. parse the output format and source segment from the request path
 2. parse `opts`, currently supporting `w`, `h`, and `q`
 3. validate the HMAC signature
-4. check the memory LRU
-5. check the media-bucket storage cache
-6. on a miss, fetch the original from the source bucket
-7. transform the image with libvips
-8. write the result into the memory LRU synchronously and the storage cache asynchronously
-9. return the image bytes with CDN-friendly headers
+4. decrypt and authenticate the source token when `IMAGE_SOURCE_KEY` is enabled
+5. check the memory LRU
+6. check the media-bucket storage cache
+7. on a miss, fetch the original from the source bucket
+8. transform the image with libvips
+9. write the result into the memory LRU synchronously and the storage cache asynchronously
+10. return the image bytes with CDN-friendly headers
 
 ## Signing canonicalization
 
-Vylux does not sign the raw browser URL string directly. It first canonicalizes:
+In plaintext mode, Vylux does not sign the raw browser URL string directly. It first canonicalizes:
 
 - `opts` into `w -> h -> q` order
 - the encoded source path into a decoded object key
 - `jpeg` into `jpg`
 
 This prevents logically equivalent requests from producing different signatures or cache keys.
+
+In encrypted mode, Vylux signs the canonical options, opaque source token, and canonical format in the `vylux/image-url/v1` domain. It verifies that signature before attempting AES-GCM decryption. Different tokens for the same source key still resolve to the same processing cache key after decryption.
 
 ## Cache layers
 

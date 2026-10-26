@@ -9,6 +9,16 @@ from .env import load_settings
 from .rustfs import RustFSClient
 
 
+def nonce_bytes(value: str) -> bytes:
+    try:
+        nonce = bytes.fromhex(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("nonce must be valid hex") from exc
+    if len(nonce) != 12:
+        raise argparse.ArgumentTypeError("nonce must be exactly 12 bytes (24 hex characters)")
+    return nonce
+
+
 def print_output(value: Any) -> None:
     if isinstance(value, (dict, list)):
         print(json.dumps(value, indent=2, ensure_ascii=False))
@@ -76,9 +86,17 @@ def build_parser() -> argparse.ArgumentParser:
     img.add_argument("source_key")
     img.add_argument("output_format")
     img.add_argument("--options", default="")
+    img.add_argument("--token", help="Reuse an existing encrypted source token")
+    img.add_argument("--nonce", type=nonce_bytes, help="Fixed 12-byte nonce as hex (test vectors only)")
 
     original = sub.add_parser("original-url", help="Build a signed /original URL")
     original.add_argument("source_key")
+    original.add_argument("--token", help="Reuse an existing encrypted source token")
+    original.add_argument("--nonce", type=nonce_bytes, help="Fixed 12-byte nonce as hex (test vectors only)")
+
+    source_token = sub.add_parser("source-token", help="Encrypt a source object key into an IMAGE_SOURCE_KEY token")
+    source_token.add_argument("source_key")
+    source_token.add_argument("--nonce", type=nonce_bytes, help="Fixed 12-byte nonce as hex (test vectors only)")
 
     thumb = sub.add_parser("thumb-url", help="Build a signed /thumb URL")
     thumb.add_argument("object_key")
@@ -146,10 +164,13 @@ def main() -> None:
         print_output(api.ready().body)
         return
     if args.command == "image-url":
-        print_output(api.build_image_url(source_key=args.source_key, output_format=args.output_format, options=args.options))
+        print_output(api.build_image_url(source_key=args.source_key, output_format=args.output_format, options=args.options, source_token=args.token, nonce=args.nonce))
         return
     if args.command == "original-url":
-        print_output(api.build_original_url(source_key=args.source_key))
+        print_output(api.build_original_url(source_key=args.source_key, source_token=args.token, nonce=args.nonce))
+        return
+    if args.command == "source-token":
+        print_output(api.build_source_token(source_key=args.source_key, nonce=args.nonce))
         return
     if args.command == "thumb-url":
         print_output(api.build_thumb_url(object_key=args.object_key))

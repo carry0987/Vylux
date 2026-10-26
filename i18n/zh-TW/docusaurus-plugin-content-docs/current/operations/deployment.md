@@ -262,5 +262,5 @@ worker-only mode 沒有 `/readyz` HTTP endpoint，因此 readiness 通常可用�
 ## 不建議的做法
 
 - 在 K8s 長期維持 `all` mode 再嘗試各自擴展 API 與 worker
-- 讓前端或公開客戶端持有 `API_KEY`、`HMAC_SECRET` 或 `KEY_TOKEN_SECRET`
+- 讓前端或公開客戶端持有 `API_KEY`、`HMAC_SECRET`、`IMAGE_SOURCE_KEY` 或 `KEY_TOKEN_SECRET`
 - 讓 source bucket 與 media bucket 混用相同寫入權限而失去權限邊界

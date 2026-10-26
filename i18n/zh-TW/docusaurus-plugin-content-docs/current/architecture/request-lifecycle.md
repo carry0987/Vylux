@@ -29,7 +29,7 @@ description: "Vylux 內最重要的幾條資料流：即時圖片、job 提交�
 
 ## 1. 即時圖片請求
 
-`GET /img/:sig/:opts/*`
+啟用 `IMAGE_SOURCE_KEY` 時使用 `GET /img/:sig/:opts/:source`，否則使用 `GET /img/:sig/:opts/*`。
 
 ```mermaid
 sequenceDiagram
@@ -40,8 +40,11 @@ sequenceDiagram
 	participant Source as Source Bucket
 	participant Vips as libvips
 
-	Client->>Server: GET /img/{sig}/{opts}/{encoded_source}.{format}
+	Client->>Server: GET /img/{sig}/{opts}/{source}.{format}
 	Server->>Server: 驗證 HMAC 與 canonical options
+	opt 啟用 IMAGE_SOURCE_KEY
+		Server->>Server: 驗證並解密 source token
+	end
 	Server->>LRU: 查快取
 	alt LRU hit
 		LRU-->>Server: image bytes

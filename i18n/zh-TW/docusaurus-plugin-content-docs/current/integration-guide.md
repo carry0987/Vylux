@@ -44,6 +44,7 @@ Vylux 不負責：
 | --- | --- | --- |
 | `API_KEY` | 內部 `/api/*` 管理端點，例如 `/api/audio/jobs`、`/api/video/jobs`、`/api/jobs/{id}` | 只應在你的 backend 或內部工具中持有 |
 | `HMAC_SECRET` | 簽署 `/img`、`/original`、`/thumb` URL | 只應在你的 backend 或簽名服務中持有 |
+| `IMAGE_SOURCE_KEY` | optional 加密 `/img` 與 `/original` URL 中的 source object key | 與簽名相同的可信 backend |
 | `KEY_TOKEN_SECRET` | 簽署 `/api/key/{id}` 的 Bearer token | 只應在你的 backend 或授權服務中持有 |
 
 不要把這些值暴露給瀏覽器、行動 App 或任何公開客戶端。
@@ -52,8 +53,8 @@ Vylux 不負責：
 
 | Use case | Endpoint 形式 | 補充 |
 | --- | --- | --- |
-| 即時 resize 或轉檔來源圖片 | `/img/{sig}/{opts}/{encoded_source}.{format}` | 使用 `HMAC_SECRET` 簽名 |
-| 受控地顯示或下載來源原檔 | `/original/{sig}/{encoded_key}` | 使用 `HMAC_SECRET` 簽名 |
+| 即時 resize 或轉檔來源圖片 | `/img/{sig}/{opts}/{source}.{format}` | 使用 `HMAC_SECRET` 簽名；設定 `IMAGE_SOURCE_KEY` 時 `source` 為 encrypted token |
+| 受控地顯示或下載來源原檔 | `/original/{sig}/{source}` | 使用同一個 optional encrypted source token |
 | 顯示已產生的縮圖、封面、preview 或其他 media-bucket 內圖片資產 | `/thumb/{sig}/{encoded_key}` | 使用 `HMAC_SECRET` 簽名，且 signing domain 要加 `thumb/` |
 | 播放 HLS | `/stream/{hash}/master.m3u8` 或 `/stream/{hash}/hls/master.m3u8` | playlist 與 segment 請求本身不需要 auth header |
 | 取得加密播放所需 content key | `/api/key/{id}` 搭配 `Authorization: Bearer {token}` | token 用 `KEY_TOKEN_SECRET` 簽署 |
@@ -86,8 +87,9 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 流程：
 
 1. 你的應用決定輸出參數，例如 `w640_h360_q80` 與 `webp`
-2. 你的應用用 `HMAC_SECRET` 對 canonical payload 做簽名
-3. 你的應用把最終 `/img/...` URL 回給瀏覽器或 CDN
+2. 設定 `IMAGE_SOURCE_KEY` 時，你的應用建立或讀取已保存的 encrypted source token
+3. 你的應用用 `HMAC_SECRET` 對 canonical payload 做簽名
+4. 你的應用把最終 `/img/...` URL 回給瀏覽器或 CDN
 
 下一步可讀：
 
@@ -140,7 +142,8 @@ job 結果常常會回 `videos/.../cover.jpg` 或 `videos/.../master.m3u8` 這�
 
 - backend 可以帶 `X-API-Key` 建立 audio 與 video jobs
 - backend 可以用 `HMAC_SECRET` 簽 `/img`、`/original`、`/thumb`
-- 前端永遠看不到 `API_KEY`、`HMAC_SECRET`、`KEY_TOKEN_SECRET`
+- 啟用 `IMAGE_SOURCE_KEY` 時，backend 可重現文件中的 token 固定向量
+- 前端永遠看不到 `API_KEY`、`HMAC_SECRET`、`IMAGE_SOURCE_KEY`、`KEY_TOKEN_SECRET`
 - HLS 播放入口會依媒體種類不同而不同：影片通常是 `/stream/{hash}/master.m3u8`，音訊通常是 `/stream/{hash}/hls/master.m3u8`
 - 加密播放只對 `/api/key/{id}` 附 `Authorization` header
 
