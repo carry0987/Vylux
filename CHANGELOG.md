@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/carry0987/Vylux/compare/v2.2.4...v2.3.0) (2026-10-26)
+
+
+### Features
+
+* **image:** configure animation frame limit ([#60](https://github.com/carry0987/Vylux/issues/60)) ([15baf65](https://github.com/carry0987/Vylux/commit/15baf6595f9c558173bf532940f9a2d9bcb43b14))
+* **image:** support encrypted source URLs ([#57](https://github.com/carry0987/Vylux/issues/57)) ([968b6a8](https://github.com/carry0987/Vylux/commit/968b6a89c514aaa7ac719cfa206ed7e20133c9d1))
+
 ## [2.2.4](https://github.com/carry0987/Vylux/compare/v2.2.3...v2.2.4) (2026-09-24)
 
 
