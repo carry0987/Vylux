@@ -54,6 +54,7 @@ func TestValidate_WorkerAndScratchSettings(t *testing.T) {
 		{name: "invalid worker concurrency", mutate: func(cfg *Config) { cfg.WorkerConcurrency = 0 }, wantErrPart: "WORKER_CONCURRENCY must be at least 1"},
 		{name: "invalid large worker concurrency", mutate: func(cfg *Config) { cfg.LargeWorkerConcurrency = 0 }, wantErrPart: "LARGE_WORKER_CONCURRENCY must be at least 1"},
 		{name: "threshold above max", mutate: func(cfg *Config) { cfg.LargeFileThreshold = 20; cfg.MaxFileSize = 10 }, wantErrPart: "LARGE_FILE_THRESHOLD must be less than or equal to MAX_FILE_SIZE"},
+		{name: "invalid animation frame limit", mutate: func(cfg *Config) { cfg.MaxAnimationFrames = 0 }, wantErrPart: "MAX_ANIMATION_FRAMES must be at least 1"},
 	}
 
 	for _, tt := range tests {
@@ -193,6 +194,7 @@ func validConfig() *Config {
 		LargeFileThreshold:     5 * 1024 * 1024 * 1024,
 		MaxFileSize:            50 * 1024 * 1024 * 1024,
 		CacheMaxSize:           1024,
+		MaxAnimationFrames:     DefaultMaxAnimationFrames,
 		FFmpegPath:             "ffmpeg",
 		FFprobePath:            "ffprobe",
 		ShakaPackagerPath:      "packager",

@@ -138,6 +138,7 @@ func newSharedIntegrationEnv(ctx context.Context) (*sharedIntegrationEnv, error)
 			EncryptionKey:      "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
 			LargeFileThreshold: 5 * 1024 * 1024 * 1024,
 			CacheMaxSize:       64 * 1024 * 1024,
+			MaxAnimationFrames: config.DefaultMaxAnimationFrames,
 		},
 	}, nil
 }

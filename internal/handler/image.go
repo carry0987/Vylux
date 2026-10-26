@@ -43,6 +43,7 @@ type ImageHandler struct {
 	mediaBucket  string
 	hmacSecret   string
 	sourceCipher *encryption.ImageSourceCipher
+	imageLimits  image.Limits
 
 	sourceFlight  singleflight.Group
 	processFlight singleflight.Group
@@ -55,6 +56,7 @@ func NewImageHandler(
 	lru *cache.LRU,
 	queries *dbq.Queries,
 	sourceCipher *encryption.ImageSourceCipher,
+	imageLimits image.Limits,
 	sourceBucket, mediaBucket, hmacSecret string,
 ) *ImageHandler {
 	return &ImageHandler{
@@ -63,6 +65,7 @@ func NewImageHandler(
 		cache:        lru,
 		queries:      queries,
 		sourceCipher: sourceCipher,
+		imageLimits:  imageLimits,
 		sourceBucket: sourceBucket,
 		mediaBucket:  mediaBucket,
 		hmacSecret:   hmacSecret,
@@ -202,7 +205,7 @@ func (h *ImageHandler) Handle(c *echo.Context) error {
 		)
 		defer span.End()
 
-		result, processErr := image.Process(raw, opts)
+		result, processErr := image.Process(raw, opts, h.imageLimits)
 		if processErr != nil {
 			span.RecordError(processErr)
 			span.SetStatus(codes.Error, processErr.Error())
